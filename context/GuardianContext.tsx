@@ -2,6 +2,7 @@ import React, { createContext, useContext, useState, useEffect, useRef } from 'r
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Device from 'expo-device';
 import * as Notifications from 'expo-notifications';
+import * as IntentLauncher from 'expo-intent-launcher';
 import { Platform } from 'react-native';
 
 export interface BlacklistedApp {
@@ -35,6 +36,7 @@ interface GuardianContextType {
   startScan: () => Promise<void>;
   isScanning: boolean;
   isInitialized: boolean;
+  openSettings: (type: 'usb' | 'apps' | 'security') => Promise<void>;
 }
 
 const STORAGE_KEYS = {
@@ -201,6 +203,25 @@ export function GuardianProvider({ children }: { children: React.ReactNode }) {
     setIsScanning(false);
   };
 
+  const openSettings = async (type: 'usb' | 'apps' | 'security') => {
+    if (Platform.OS !== 'android') {
+      alert('Эта функция доступна только на Android устройствах');
+      return;
+    }
+
+    try {
+      if (type === 'usb') {
+        await IntentLauncher.startActivityAsync(IntentLauncher.ActivityAction.DEVELOPER_SETTINGS);
+      } else if (type === 'apps') {
+        await IntentLauncher.startActivityAsync(IntentLauncher.ActivityAction.APPLICATION_SETTINGS);
+      } else if (type === 'security') {
+        await IntentLauncher.startActivityAsync(IntentLauncher.ActivityAction.SECURITY_SETTINGS);
+      }
+    } catch (e) {
+      console.error('Failed to open settings', e);
+    }
+  };
+
   return (
     <GuardianContext.Provider
       value={{
@@ -216,6 +237,7 @@ export function GuardianProvider({ children }: { children: React.ReactNode }) {
         startScan,
         isScanning,
         isInitialized,
+        openSettings,
       }}
     >
       {children}

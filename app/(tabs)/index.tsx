@@ -5,7 +5,7 @@ import { useGuardian } from '@/context/GuardianContext';
 import { useRouter } from 'expo-router';
 
 export default function HomeScreen() {
-  const { isProtectionEnabled, stats, usbStatus, toggleProtection, startScan, isScanning } = useGuardian();
+  const { isProtectionEnabled, stats, usbStatus, toggleProtection, startScan, isScanning, openSettings } = useGuardian();
   const router = useRouter();
 
   return (
@@ -73,13 +73,16 @@ export default function HomeScreen() {
 
         {/* Stats Row */}
         <View className="flex-row justify-between px-6">
-          <View className="items-center flex-1">
+          <Pressable 
+            onPress={() => openSettings('usb')}
+            className="items-center flex-1"
+          >
             <View className="mb-2 rounded-lg bg-[#1a1c26] p-2">
               <MaterialCommunityIcons name="usb" size={20} color={usbStatus ? "#ef4444" : "#60a5fa"} />
             </View>
             <Text className="text-xs font-bold text-[#60a5fa]">USB</Text>
             <Text className="text-xs text-white">✓ {usbStatus ? 'Вкл' : 'Выкл'}</Text>
-          </View>
+          </Pressable>
           <View className="h-12 w-[1px] bg-gray-800 self-center" />
           <View className="items-center flex-1">
             <View className="mb-2 rounded-lg bg-[#1a1c26] p-2">
