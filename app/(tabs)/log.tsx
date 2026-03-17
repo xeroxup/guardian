@@ -1,7 +1,7 @@
 import React from 'react';
 import { View, Text, SafeAreaView, FlatList } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
-import { useGuardian } from '@/hooks/useGuardian';
+import { useGuardian } from '@/context/GuardianContext';
 
 export default function LogScreen() {
   const { logs } = useGuardian();

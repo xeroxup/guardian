@@ -1,7 +1,7 @@
 import React from 'react';
 import { View, Text, SafeAreaView, FlatList, Pressable, Alert } from 'react-native';
 import { MaterialCommunityIcons, Ionicons } from '@expo/vector-icons';
-import { useGuardian } from '@/hooks/useGuardian';
+import { useGuardian } from '@/context/GuardianContext';
 
 export default function BlockingScreen() {
   const { blacklist, addToBlacklist, removeFromBlacklist } = useGuardian();

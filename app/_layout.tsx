@@ -2,29 +2,40 @@ import "../global.css";
 import { DarkTheme, DefaultTheme, ThemeProvider } from '@react-navigation/native';
 import { Stack } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import * as SplashScreen from 'expo-splash-screen';
 import 'react-native-reanimated';
 
 import { useColorScheme } from '@/hooks/use-color-scheme';
+import { GuardianProvider, useGuardian } from '@/context/GuardianContext';
 
-// Prevent the splash screen from auto-hiding before asset loading is complete.
+// Keep the splash screen visible while we fetch resources
 SplashScreen.preventAutoHideAsync().catch(() => {});
 
-export const unstable_settings = {
-  anchor: '(tabs)',
-};
-
-export default function RootLayout() {
+function RootLayoutContent() {
   const colorScheme = useColorScheme();
+  const { isInitialized } = useGuardian();
+  const [isAppReady, setIsAppReady] = useState(false);
 
   useEffect(() => {
-    // Hide splash screen after component mounts
-    const hideSplash = async () => {
-      await SplashScreen.hideAsync().catch(() => {});
-    };
-    hideSplash();
-  }, []);
+    // App initialization timeout to prevent freeze
+    const timeout = setTimeout(() => {
+      setIsAppReady(true);
+    }, 3000);
+
+    if (isInitialized) {
+      clearTimeout(timeout);
+      setIsAppReady(true);
+    }
+
+    return () => clearTimeout(timeout);
+  }, [isInitialized]);
+
+  useEffect(() => {
+    if (isAppReady) {
+      SplashScreen.hideAsync().catch(() => {});
+    }
+  }, [isAppReady]);
 
   return (
     <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
@@ -34,5 +45,13 @@ export default function RootLayout() {
       </Stack>
       <StatusBar style="auto" />
     </ThemeProvider>
+  );
+}
+
+export default function RootLayout() {
+  return (
+    <GuardianProvider>
+      <RootLayoutContent />
+    </GuardianProvider>
   );
 }

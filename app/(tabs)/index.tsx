@@ -1,7 +1,7 @@
 import React from 'react';
 import { View, Text, ScrollView, Pressable, SafeAreaView } from 'react-native';
 import { Ionicons, MaterialCommunityIcons, Feather } from '@expo/vector-icons';
-import { useGuardian } from '@/hooks/useGuardian';
+import { useGuardian } from '@/context/GuardianContext';
 import { useRouter } from 'expo-router';
 
 export default function HomeScreen() {
@@ -57,7 +57,7 @@ export default function HomeScreen() {
             }`}>
               {isScanning ? (
                 <View className="items-center">
-                  <MaterialCommunityIcons name="loading" size={64} color="#6366f1" className="animate-spin" />
+                  <MaterialCommunityIcons name="loading" size={64} color="#6366f1" />
                   <Text className="mt-2 text-[10px] font-bold text-[#6366f1] uppercase">Сканирование...</Text>
                 </View>
               ) : (

@@ -1,11 +1,11 @@
 import React from 'react';
 import { View, Text, SafeAreaView, ScrollView, Switch, Pressable, Alert } from 'react-native';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
-import { useGuardian } from '@/hooks/useGuardian';
+import { useGuardian } from '@/context/GuardianContext';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 export default function SettingsScreen() {
-  const { isProtectionEnabled, toggleProtection, usbStatus, toggleUsbStatus, stats } = useGuardian();
+  const { isProtectionEnabled, toggleProtection, usbStatus, toggleUsbStatus } = useGuardian();
 
   const handleResetStats = () => {
     Alert.alert(
@@ -101,7 +101,7 @@ export default function SettingsScreen() {
         </View>
 
         <View className="items-center py-10">
-          <Text className="text-gray-600 text-[10px] uppercase font-bold tracking-widest">Guardian v1.0.0</Text>
+          <Text className="text-gray-600 text-[10px] uppercase font-bold tracking-widest">Guardian v1.0.1</Text>
         </View>
       </ScrollView>
     </SafeAreaView>
