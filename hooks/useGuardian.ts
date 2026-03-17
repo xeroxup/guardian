@@ -28,15 +28,17 @@ const STORAGE_KEYS = {
 };
 
 // Configure notification behavior
-Notifications.setNotificationHandler({
-  handleNotification: async () => ({
-    shouldShowAlert: true,
-    shouldPlaySound: true,
-    shouldSetBadge: false,
-    shouldShowBanner: true,
-    shouldShowList: true,
-  }),
-});
+if (Platform.OS !== 'web') {
+  Notifications.setNotificationHandler({
+    handleNotification: async () => ({
+      shouldShowAlert: true,
+      shouldPlaySound: true,
+      shouldSetBadge: false,
+      shouldShowBanner: true,
+      shouldShowList: true,
+    }),
+  });
+}
 
 export function useGuardian() {
   const [isProtectionEnabled, setIsProtectionEnabled] = useState(true);
@@ -55,22 +57,25 @@ export function useGuardian() {
 
   useEffect(() => {
     loadData();
-    setupNotifications();
     
+    if (Platform.OS !== 'web') {
+      setupNotifications();
+      
+      notificationListener.current = Notifications.addNotificationReceivedListener(notification => {
+        console.log('Notification received:', notification);
+      });
+
+      responseListener.current = Notifications.addNotificationResponseReceivedListener(response => {
+        console.log('Notification response received:', response);
+      });
+    }
+
     // Simulate periodic checks
     const interval = setInterval(() => {
       if (isProtectionEnabled) {
         checkSecurityStatus();
       }
     }, 10000);
-
-    notificationListener.current = Notifications.addNotificationReceivedListener(notification => {
-      console.log('Notification received:', notification);
-    });
-
-    responseListener.current = Notifications.addNotificationResponseReceivedListener(response => {
-      console.log('Notification response received:', response);
-    });
 
     return () => {
       clearInterval(interval);
@@ -80,15 +85,16 @@ export function useGuardian() {
   }, [isProtectionEnabled]);
 
   const setupNotifications = async () => {
-    if (Platform.OS === 'web') return;
-    
-    const { status: existingStatus } = await Notifications.getPermissionsAsync();
-    let finalStatus = existingStatus;
-    if (existingStatus !== 'granted') {
-      const { status } = await Notifications.requestPermissionsAsync();
-      finalStatus = status;
+    try {
+      const { status: existingStatus } = await Notifications.getPermissionsAsync();
+      let finalStatus = existingStatus;
+      if (existingStatus !== 'granted') {
+        const { status } = await Notifications.requestPermissionsAsync();
+        finalStatus = status;
+      }
+    } catch (e) {
+      console.log('Error setting up notifications', e);
     }
-    if (finalStatus !== 'granted') return;
   };
 
   const sendAlert = async (title: string, body: string) => {
@@ -96,15 +102,18 @@ export function useGuardian() {
       console.log(`[Notification] ${title}: ${body}`);
       return;
     }
-    await Notifications.scheduleNotificationAsync({
-      content: { title, body },
-      trigger: null,
-    });
+    try {
+      await Notifications.scheduleNotificationAsync({
+        content: { title, body },
+        trigger: null,
+      });
+    } catch (e) {
+      console.log('Error sending notification', e);
+    }
   };
 
   const checkSecurityStatus = async () => {
-    // In a real app, we'd use native modules here.
-    // For now, we simulate detecting USB debugging or a blacklisted app attempt.
+    // Simulation
   };
 
   const loadData = async () => {
