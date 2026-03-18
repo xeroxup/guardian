@@ -5,6 +5,9 @@ import android.content.pm.ApplicationInfo
 import android.content.pm.PackageManager
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import com.guardian.app.data.api.ScanResult
+import com.guardian.app.data.api.VirusTotalResult
+import com.guardian.app.data.api.VirusTotalService
 import com.guardian.app.data.model.AppStats
 import com.guardian.app.data.model.BlacklistedApp
 import com.guardian.app.data.model.EventType
@@ -16,6 +19,7 @@ import kotlinx.coroutines.launch
 class GuardianViewModel(application: Application) : AndroidViewModel(application) {
     
     private val repository = GuardianRepository(application)
+    private val virusTotalService = VirusTotalService(application)
     
     // Main protection
     val isProtectionEnabled = repository.isProtectionEnabled.stateIn(viewModelScope, SharingStarted.Eagerly, true)
@@ -30,6 +34,16 @@ class GuardianViewModel(application: Application) : AndroidViewModel(application
     val blacklist = repository.blacklist.stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
     val events = repository.events.stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
     val stats = repository.stats.stateIn(viewModelScope, SharingStarted.Eagerly, AppStats())
+    
+    // VirusTotal scan state
+    private val _virusTotalResults = MutableStateFlow<Map<String, VirusTotalResult>>(emptyMap())
+    val virusTotalResults: StateFlow<Map<String, VirusTotalResult>> = _virusTotalResults.asStateFlow()
+    
+    private val _isVirusTotalScanning = MutableStateFlow(false)
+    val isVirusTotalScanning: StateFlow<Boolean> = _isVirusTotalScanning.asStateFlow()
+    
+    private val _virusTotalProgress = MutableStateFlow(Pair(0, 0))
+    val virusTotalProgress: StateFlow<Pair<Int, Int>> = _virusTotalProgress.asStateFlow()
     
     // Computed
     val threats get() = events.value.count { it.type == EventType.APP_BLOCKED || it.type == EventType.USB_ENABLED }
@@ -232,5 +246,103 @@ class GuardianViewModel(application: Application) : AndroidViewModel(application
         viewModelScope.launch {
             repository.resetStats()
         }
+    }
+    
+    // VirusTotal scan methods
+    fun isVirusTotalApiKeyConfigured(): Boolean = virusTotalService.isApiKeyConfigured()
+    
+    fun startVirusTotalScan() {
+        if (!virusTotalService.isApiKeyConfigured()) {
+            viewModelScope.launch {
+                repository.addEvent(
+                    EventType.SCAN_COMPLETED,
+                    "⚠️ VirusTotal Not Configured",
+                    "Please add your API key in settings"
+                )
+            }
+            return
+        }
+        
+        viewModelScope.launch {
+            _isVirusTotalScanning.value = true
+            _virusTotalResults.value = emptyMap()
+            
+            try {
+                val pm = getApplication<Application>().packageManager
+                val packages = pm.getInstalledApplications(PackageManager.GET_META_DATA)
+                val packageNames = packages.map { it.packageName }
+                
+                var threatsFound = 0
+                val resultsMap = mutableMapOf<String, VirusTotalResult>()
+                
+                packageNames.forEachIndexed { index, packageName ->
+                    _virusTotalProgress.value = Pair(index + 1, packageNames.size)
+                    
+                    val appName = try {
+                        pm.getApplicationLabel(
+                            packages.first { it.packageName == packageName }
+                        ).toString()
+                    } catch (e: Exception) { packageName }
+                    
+                    when (val result = virusTotalService.scanApp(packageName)) {
+                        is ScanResult.Success -> {
+                            resultsMap[packageName] = result.result
+                            
+                            if (result.result.isInfected) {
+                                threatsFound++
+                                repository.incrementBlockedCount()
+                                repository.addEvent(
+                                    EventType.APP_BLOCKED,
+                                    "🦠 VirusTotal Threat",
+                                    "$appName - ${result.result.malwareName ?: "detected by ${result.result.detectedBy} scanners"}",
+                                    packageName
+                                )
+                            }
+                        }
+                        is ScanResult.Error -> {
+                            // Log error but continue scanning
+                        }
+                        is ScanResult.NotFound -> {
+                            // App not in VirusTotal database
+                        }
+                        is ScanResult.RateLimited -> {
+                            repository.addEvent(
+                                EventType.SCAN_COMPLETED,
+                                "⏳ Rate Limited",
+                                "VirusTotal API rate limit reached. Try again later."
+                            )
+                            break
+                        }
+                    }
+                    
+                    // Rate limiting for free API (4 requests/min)
+                    if (index < packageNames.size - 1) {
+                        kotlinx.coroutines.delay(16000)
+                    }
+                }
+                
+                _virusTotalResults.value = resultsMap
+                
+                repository.addEvent(
+                    EventType.SCAN_COMPLETED,
+                    if (threatsFound > 0) "⚠️ VirusTotal Scan Complete" else "✅ VirusTotal Scan Complete",
+                    "Scanned ${resultsMap.size} apps - $threatsFound threats found"
+                )
+                
+            } catch (e: Exception) {
+                repository.addEvent(
+                    EventType.SCAN_COMPLETED,
+                    "❌ VirusTotal Scan Failed",
+                    "Error: ${e.message}"
+                )
+            } finally {
+                _isVirusTotalScanning.value = false
+                _virusTotalProgress.value = Pair(0, 0)
+            }
+        }
+    }
+    
+    fun getVirusTotalResult(packageName: String): VirusTotalResult? {
+        return _virusTotalResults.value[packageName]
     }
 }
