@@ -105,7 +105,9 @@ class GuardianRepository(private val context: Context) {
     }
     
     suspend fun resetStats() {
-        context.dataStore.edit { prefs[STATS] = """{"threatsBlocked":0,"appsScanned":0,"lastScanTime":0}""" }
+        context.dataStore.edit { prefs ->
+            prefs[STATS] = """{"threatsBlocked":0,"appsScanned":0,"lastScanTime":0}"""
+        }
     }
     
     // JSON Helpers
