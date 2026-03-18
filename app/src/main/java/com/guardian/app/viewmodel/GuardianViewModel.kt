@@ -1,7 +1,9 @@
 package com.guardian.app.viewmodel
 
 import android.app.Application
+import android.content.Intent
 import android.content.pm.PackageManager
+import android.os.Build
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.guardian.app.data.model.AppStats
@@ -9,83 +11,92 @@ import com.guardian.app.data.model.BlacklistedApp
 import com.guardian.app.data.model.EventType
 import com.guardian.app.data.model.SecurityEvent
 import com.guardian.app.data.repository.GuardianRepository
-import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
 
 class GuardianViewModel(application: Application) : AndroidViewModel(application) {
     
     private val repository = GuardianRepository(application)
     
-    // UI State
-    val isProtectionEnabled = repository.isProtectionEnabled.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), true)
-    val isUsbDebugEnabled = repository.isUsbDebugEnabled.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), false)
-    val blacklist = repository.blacklist.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
-    val events = repository.events.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
-    val logs = events // Alias for compatibility
-    val stats = repository.stats.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), AppStats())
-    val isScanning = MutableStateFlow(false)
-    val usbStatus = repository.isUsbDebugEnabled
+    // Main protection
+    val isProtectionEnabled = repository.isProtectionEnabled.stateIn(viewModelScope, SharingStarted.Eagerly, true)
     
-    // Computed properties for UI compatibility
-    val threats: Int get() = stats.value.threatsBlocked
-    val blocks: Int get() = stats.value.threatsBlocked
-    val checks: Int get() = stats.value.appsScanned
+    // Individual module toggles
+    val isUsbMonitorEnabled = repository.isUsbMonitorEnabled.stateIn(viewModelScope, SharingStarted.Eagerly, true)
+    val isSmsFilterEnabled = repository.isSmsFilterEnabled.stateIn(viewModelScope, SharingStarted.Eagerly, true)
+    val isCallFilterEnabled = repository.isCallFilterEnabled.stateIn(viewModelScope, SharingStarted.Eagerly, true)
+    val isAppMonitorEnabled = repository.isAppMonitorEnabled.stateIn(viewModelScope, SharingStarted.Eagerly, true)
     
-    // Actions
-    fun toggleProtection() {
+    // Data
+    val blacklist = repository.blacklist.stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
+    val events = repository.events.stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
+    val stats = repository.stats.stateIn(viewModelScope, SharingStarted.Eagerly, AppStats())
+    
+    // Computed
+    val threats get() = events.value.count { it.type == EventType.APP_BLOCKED || it.type == EventType.USB_ENABLED }
+    val blocks get() = stats.value.threatsBlocked
+    val checks get() = stats.value.appsScanned
+    
+    // Setters
+    fun setProtectionEnabled(enabled: Boolean) {
         viewModelScope.launch {
-            val newValue = !isProtectionEnabled.value
-            repository.setProtectionEnabled(newValue)
-            
-            if (newValue) {
-                repository.addEvent(
-                    EventType.PROTECTION_ENABLED,
-                    "🛡️ Protection Enabled",
-                    "Active monitoring started"
-                )
-            } else {
-                repository.addEvent(
-                    EventType.PROTECTION_DISABLED,
-                    "⚠️ Protection Disabled",
-                    "Device is vulnerable"
-                )
-            }
+            repository.setProtectionEnabled(enabled)
+            repository.addEvent(
+                if (enabled) EventType.PROTECTION_ENABLED else EventType.PROTECTION_DISABLED,
+                if (enabled) "🛡️ Protection Enabled" else "⏸️ Protection Disabled",
+                "Security protection has been ${if (enabled) "enabled" else "disabled"}"
+            )
         }
     }
     
-    fun toggleUsbDebug() {
+    fun setUsbMonitorEnabled(enabled: Boolean) {
         viewModelScope.launch {
-            val newValue = !isUsbDebugEnabled.value
-            repository.setUsbDebugEnabled(newValue)
-            
-            if (newValue) {
-                repository.addEvent(
-                    EventType.USB_ENABLED,
-                    "🔌 USB Debug Enabled",
-                    "Security risk detected"
-                )
-            } else {
-                repository.addEvent(
-                    EventType.USB_DISABLED,
-                    "✅ USB Debug Disabled",
-                    "Threat removed"
-                )
-            }
+            repository.setUsbMonitorEnabled(enabled)
+            repository.addEvent(
+                EventType.SCAN_COMPLETED,
+                "🔌 USB Monitor",
+                "USB monitoring ${if (enabled) "enabled" else "disabled"}"
+            )
         }
     }
     
+    fun setSmsFilterEnabled(enabled: Boolean) {
+        viewModelScope.launch {
+            repository.setSmsFilterEnabled(enabled)
+            repository.addEvent(
+                EventType.SCAN_COMPLETED,
+                "📱 SMS Filter",
+                "SMS filtering ${if (enabled) "enabled" else "disabled"}"
+            )
+        }
+    }
+    
+    fun setCallFilterEnabled(enabled: Boolean) {
+        viewModelScope.launch {
+            repository.setCallFilterEnabled(enabled)
+            repository.addEvent(
+                EventType.SCAN_COMPLETED,
+                "📞 Call Filter",
+                "Call filtering ${if (enabled) "enabled" else "disabled"}"
+            )
+        }
+    }
+    
+    fun setAppMonitorEnabled(enabled: Boolean) {
+        viewModelScope.launch {
+            repository.setAppMonitorEnabled(enabled)
+            repository.addEvent(
+                EventType.SCAN_COMPLETED,
+                "📦 App Monitor",
+                "App monitoring ${if (enabled) "enabled" else "disabled"}"
+            )
+        }
+    }
+    
+    // Blacklist operations
     fun addToBlacklist(name: String, packageName: String) {
         viewModelScope.launch {
             repository.addToBlacklist(BlacklistedApp(name = name, packageName = packageName))
-            repository.addEvent(
-                EventType.APP_BLOCKED,
-                "🚫 App Blocked",
-                "$name has been blocked",
-                packageName
-            )
-            repository.incrementBlockedCount()
         }
     }
     
@@ -95,71 +106,44 @@ class GuardianViewModel(application: Application) : AndroidViewModel(application
         }
     }
     
-    suspend fun isPackageBlocked(packageName: String): Boolean {
-        return repository.isPackageBlacklisted(packageName)
-    }
-    
-    fun addEvent(type: EventType, title: String, description: String, packageName: String? = null) {
-        viewModelScope.launch {
-            repository.addEvent(type, title, description, packageName)
-        }
-    }
-    
-    fun resetStats() {
-        viewModelScope.launch {
-            repository.resetStats()
-        }
-    }
-    
+    // Scan
     fun startScan() {
         viewModelScope.launch {
-            isScanning.value = true
             try {
-                val app = getApplication<Application>()
-                val pm = app.packageManager
-                val packages = withContext(Dispatchers.IO) {
-                    pm.getInstalledApplications(PackageManager.GET_META_DATA)
-                }
+                val pm = getApplication<Application>().packageManager
+                val packages = pm.getInstalledApplications(PackageManager.GET_META_DATA)
+                val blacklisted = blacklist.value.map { it.packageName }.toSet()
                 
-                val blockedApps = blacklist.value
                 var threatsFound = 0
-                
                 for (packageInfo in packages) {
-                    // Check if app is on blacklist
-                    if (blockedApps.any { it.packageName == packageInfo.packageName }) {
+                    if (blacklisted.contains(packageInfo.packageName)) {
                         threatsFound++
+                        repository.incrementBlockedCount()
                         repository.addEvent(
                             EventType.APP_BLOCKED,
-                            "🚫 Threat Detected",
-                            "${packageInfo.packageName} is blacklisted"
+                            "⚠️ Blacklisted App Detected",
+                            pm.getApplicationLabel(packageInfo).toString(),
+                            packageInfo.packageName
                         )
                     }
                 }
                 
                 repository.updateScanStats(packages.size)
-                
-                if (threatsFound > 0) {
-                    repository.addEvent(
-                        EventType.SCAN_COMPLETED,
-                        "⚠️ Scan Complete",
-                        "Found $threatsFound threats"
-                    )
-                } else {
-                    repository.addEvent(
-                        EventType.SCAN_COMPLETED,
-                        "✅ Scan Complete",
-                        "Scanned ${packages.size} apps - no threats"
-                    )
-                }
-            } catch (e: Exception) {
                 repository.addEvent(
                     EventType.SCAN_COMPLETED,
-                    "❌ Scan Failed",
-                    e.message ?: "Unknown error"
+                    "🔍 Scan Completed",
+                    "Scanned ${packages.size} apps, $threatsFound threats found"
                 )
-            } finally {
-                isScanning.value = false
+            } catch (e: Exception) {
+                // Handle error
             }
+        }
+    }
+    
+    // Reset stats
+    fun resetStats() {
+        viewModelScope.launch {
+            repository.resetStats()
         }
     }
 }

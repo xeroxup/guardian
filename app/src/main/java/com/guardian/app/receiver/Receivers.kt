@@ -19,7 +19,6 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
-import java.util.regex.Pattern
 
 // Anti-fraud keywords to detect in SMS
 private val SCAM_KEYWORDS = listOf(
@@ -29,7 +28,7 @@ private val SCAM_KEYWORDS = listOf(
     "срочно", "urgent", "перевод", "перевести", "перечисление",
     "налоговая", "судебный", "пристав", "долг",
     "крипто", "bitcoin", "инвестиция", "удвоитель",
-    "смс", "sms", "на ваш номер", " короткий номер",
+    "смс", "sms", "на ваш номер", "короткий номер",
     "звонок", "перезвоните", "пропущенный",
     "аккаунт", "восстановить", "взлом", "хакер"
 )
@@ -40,6 +39,9 @@ private val SUSPICIOUS_URLS = listOf(
     "vk.cc", "tiny.cc", "cutt.ly", "shorturl",
     ".xyz", ".top", ".click", ".link", ".info"
 )
+
+// Global flag to prevent repeated notifications
+private var lastUsbNotificationTime = 0L
 
 private fun showNotification(context: Context, title: String, message: String) {
     try {
@@ -94,32 +96,64 @@ private fun isUsbDebuggingEnabled(context: Context): Boolean {
     }
 }
 
+private suspend fun isProtectionAndModuleEnabled(context: Context, module: String): Boolean {
+    return try {
+        val repository = GuardianRepository(context)
+        val protectionEnabled = repository.isProtectionEnabled.first()
+        if (!protectionEnabled) return false
+        
+        when (module) {
+            "usb" -> repository.isUsbMonitorEnabled.first()
+            "sms" -> repository.isSmsFilterEnabled.first()
+            "call" -> repository.isCallFilterEnabled.first()
+            "app" -> repository.isAppMonitorEnabled.first()
+            else -> false
+        }
+    } catch (e: Exception) {
+        false
+    }
+}
+
+private fun getAppName(context: Context, packageName: String): String {
+    return try {
+        val pm = context.packageManager
+        val appInfo = pm.getApplicationInfo(packageName, 0)
+        pm.getApplicationLabel(appInfo).toString()
+    } catch (e: PackageManager.NameNotFoundException) {
+        packageName
+    }
+}
+
 // SMS Filter - blocks scam SMS
 class SmsReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
         if (intent.action != "android.provider.Telephony.SMS_RECEIVED") return
         
-        val bundle = intent.extras ?: return
-        val pdus = bundle.get("pdus") as? Array<*> ?: return
-        
-        for (pdu in pdus) {
-            val sms = SmsMessage.createFromPdu(pdu as ByteArray)
-            val message = sms.messageBody ?: continue
-            val sender = sms.originatingAddress ?: "Unknown"
-            
-            // Check for scam
-            if (checkForScam(message)) {
-                // Log scam detected
-                logEvent(context, "⚠️ Scam SMS Detected", "From: $sender")
+        CoroutineScope(Dispatchers.IO).launch {
+            try {
+                if (!isProtectionAndModuleEnabled(context, "sms")) return@launch
                 
-                showNotification(
-                    context,
-                    "⚠️ Suspicious SMS Blocked",
-                    "Scam message from $sender blocked"
-                )
+                val bundle = intent.extras ?: return@launch
+                val pdus = bundle.get("pdus") as? Array<*> ?: return@launch
                 
-                // In a real app, would use SmsFilter to block
-                // For now, we just notify
+                for (pdu in pdus) {
+                    val sms = SmsMessage.createFromPdu(pdu as ByteArray)
+                    val message = sms.messageBody ?: continue
+                    val sender = sms.originatingAddress ?: "Unknown"
+                    
+                    // Check for scam
+                    if (checkForScam(message)) {
+                        logEvent(context, "⚠️ Scam SMS Detected", "From: $sender")
+                        
+                        showNotification(
+                            context,
+                            "⚠️ Suspicious SMS Blocked",
+                            "Scam message from $sender blocked"
+                        )
+                    }
+                }
+            } catch (e: Exception) {
+                // Ignore errors
             }
         }
     }
@@ -130,22 +164,30 @@ class CallReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
         if (intent.action != "android.intent.action.PHONE_STATE") return
         
-        val state = intent.getStringExtra(TelephonyManager.EXTRA_STATE)
-        if (state != TelephonyManager.EXTRA_STATE_RINGING) return
-        
-        val number = intent.getStringExtra(TelephonyManager.EXTRA_INCOMING_NUMBER) ?: return
-        
-        // Check for suspicious numbers (can be expanded with blacklist)
-        val suspiciousPrefixes = listOf("+44", "+1-900", "8-800", "8495", "8800")
-        
-        if (suspiciousPrefixes.any { number.startsWith(it) }) {
-            logEvent(context, "⚠️ Suspicious Call", "From: $number")
-            
-            showNotification(
-                context,
-                "⚠️ Suspicious Call Blocked",
-                "Call from $number may be fraud"
-            )
+        CoroutineScope(Dispatchers.IO).launch {
+            try {
+                if (!isProtectionAndModuleEnabled(context, "call")) return@launch
+                
+                val state = intent.getStringExtra(TelephonyManager.EXTRA_STATE)
+                if (state != TelephonyManager.EXTRA_STATE_RINGING) return@launch
+                
+                val number = intent.getStringExtra(TelephonyManager.EXTRA_INCOMING_NUMBER) ?: return@launch
+                
+                // Check for suspicious numbers
+                val suspiciousPrefixes = listOf("+44", "+1-900", "8-800", "8495", "8800", "+7-900", "+7900")
+                
+                if (suspiciousPrefixes.any { number.startsWith(it) }) {
+                    logEvent(context, "⚠️ Suspicious Call", "From: $number")
+                    
+                    showNotification(
+                        context,
+                        "⚠️ Suspicious Call Detected",
+                        "Call from $number may be fraud"
+                    )
+                }
+            } catch (e: Exception) {
+                // Ignore errors
+            }
         }
     }
 }
@@ -155,56 +197,60 @@ class UsbMonitorReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
         when (intent.action) {
             Intent.ACTION_BOOT_COMPLETED -> {
-                checkUsbDebugging(context)
+                CoroutineScope(Dispatchers.IO).launch {
+                    checkUsbDebugging(context)
+                }
             }
             "android.hardware.usb.action.USB_STATE" -> {
                 if (intent.getBooleanExtra("connected", false)) {
-                    // USB connected - check debugging status
-                    checkUsbDebugging(context)
+                    CoroutineScope(Dispatchers.IO).launch {
+                        checkUsbDebugging(context)
+                    }
                 }
             }
         }
     }
     
-    private fun checkUsbDebugging(context: Context) {
-        CoroutineScope(Dispatchers.IO).launch {
-            try {
+    private suspend fun checkUsbDebugging(context: Context) {
+        try {
+            if (!isProtectionAndModuleEnabled(context, "usb")) return
+            
+            // Rate limit: only show notification once per hour
+            val currentTime = System.currentTimeMillis()
+            if (currentTime - lastUsbNotificationTime < 3600000) return
+            
+            if (isUsbDebuggingEnabled(context)) {
+                lastUsbNotificationTime = currentTime
+                
+                showNotification(
+                    context,
+                    "⚠️ Security Warning",
+                    "USB Debugging is ENABLED! This is a major security risk. Disable in Developer Options."
+                )
+                
                 val repository = GuardianRepository(context)
-                val isProtectionEnabled = repository.isProtectionEnabled.first()
-                
-                if (!isProtectionEnabled) return@launch
-                
-                if (isUsbDebuggingEnabled(context)) {
-                    showNotification(
-                        context,
-                        "⚠️ Security Warning",
-                        "USB Debugging is ENABLED! This is a major security risk. Disable in Developer Options."
-                    )
-                    
-                    repository.addEvent(
-                        EventType.USB_ENABLED,
-                        "⚠️ USB Debugging Detected",
-                        "Security threat - USB debugging is enabled"
-                    )
-                }
-            } catch (e: Exception) {
-                // Ignore
+                repository.addEvent(
+                    EventType.USB_ENABLED,
+                    "⚠️ USB Debugging Detected",
+                    "Security threat - USB debugging is enabled"
+                )
             }
+        } catch (e: Exception) {
+            // Ignore errors
         }
     }
 }
 
-// App installation tracker (for info only, no blocking)
+// App installation tracker
 class AppMonitorReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
         val packageName = intent.data?.schemeSpecificPart ?: return
         
         CoroutineScope(Dispatchers.IO).launch {
             try {
-                val repository = GuardianRepository(context)
-                val isProtectionEnabled = repository.isProtectionEnabled.first()
+                if (!isProtectionAndModuleEnabled(context, "app")) return@launch
                 
-                if (!isProtectionEnabled) return@launch
+                val repository = GuardianRepository(context)
                 
                 when (intent.action) {
                     Intent.ACTION_PACKAGE_ADDED -> {
@@ -225,18 +271,8 @@ class AppMonitorReceiver : BroadcastReceiver() {
                     }
                 }
             } catch (e: Exception) {
-                // Ignore
+                // Ignore errors
             }
-        }
-    }
-    
-    private fun getAppName(context: Context, packageName: String): String {
-        return try {
-            val pm = context.packageManager
-            val appInfo = pm.getApplicationInfo(packageName, 0)
-            pm.getApplicationLabel(appInfo).toString()
-        } catch (e: PackageManager.NameNotFoundException) {
-            packageName
         }
     }
 }

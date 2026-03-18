@@ -18,18 +18,48 @@ private val Context.dataStore: DataStore<Preferences> by preferencesDataStore(na
 class GuardianRepository(private val context: Context) {
     
     companion object {
+        // Main protection toggle
         private val PROTECTION_ENABLED = booleanPreferencesKey("protection_enabled")
+        
+        // Individual module toggles
+        private val USB_MONITOR_ENABLED = booleanPreferencesKey("usb_monitor_enabled")
+        private val SMS_FILTER_ENABLED = booleanPreferencesKey("sms_filter_enabled")
+        private val CALL_FILTER_ENABLED = booleanPreferencesKey("call_filter_enabled")
+        private val APP_MONITOR_ENABLED = booleanPreferencesKey("app_monitor_enabled")
+        
         private val USB_DEBUG_ENABLED = booleanPreferencesKey("usb_debug_enabled")
         private val BLACKLIST = stringPreferencesKey("blacklist")
         private val EVENTS = stringPreferencesKey("events")
         private val STATS = stringPreferencesKey("stats")
     }
     
-    // Protection State
+    // Main Protection State
     val isProtectionEnabled: Flow<Boolean> = context.dataStore.data.map { it[PROTECTION_ENABLED] ?: true }
     
     suspend fun setProtectionEnabled(enabled: Boolean) {
         context.dataStore.edit { it[PROTECTION_ENABLED] = enabled }
+    }
+    
+    // Individual Module States
+    val isUsbMonitorEnabled: Flow<Boolean> = context.dataStore.data.map { it[USB_MONITOR_ENABLED] ?: true }
+    val isSmsFilterEnabled: Flow<Boolean> = context.dataStore.data.map { it[SMS_FILTER_ENABLED] ?: true }
+    val isCallFilterEnabled: Flow<Boolean> = context.dataStore.data.map { it[CALL_FILTER_ENABLED] ?: true }
+    val isAppMonitorEnabled: Flow<Boolean> = context.dataStore.data.map { it[APP_MONITOR_ENABLED] ?: true }
+    
+    suspend fun setUsbMonitorEnabled(enabled: Boolean) {
+        context.dataStore.edit { it[USB_MONITOR_ENABLED] = enabled }
+    }
+    
+    suspend fun setSmsFilterEnabled(enabled: Boolean) {
+        context.dataStore.edit { it[SMS_FILTER_ENABLED] = enabled }
+    }
+    
+    suspend fun setCallFilterEnabled(enabled: Boolean) {
+        context.dataStore.edit { it[CALL_FILTER_ENABLED] = enabled }
+    }
+    
+    suspend fun setAppMonitorEnabled(enabled: Boolean) {
+        context.dataStore.edit { it[APP_MONITOR_ENABLED] = enabled }
     }
     
     // USB Debug State

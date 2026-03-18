@@ -27,7 +27,7 @@ import java.util.*
 @Composable
 fun HomeScreen(viewModel: GuardianViewModel) {
     val isProtectionEnabled by viewModel.isProtectionEnabled.collectAsState()
-    val isUsbDebugEnabled by viewModel.isUsbDebugEnabled.collectAsState()
+    val isUsbMonitorEnabled by viewModel.isUsbMonitorEnabled.collectAsState()
     val stats by viewModel.stats.collectAsState()
     
     Column(
@@ -56,10 +56,10 @@ fun HomeScreen(viewModel: GuardianViewModel) {
                 )
             }
             
-            // Protection Toggle
+            // Main Protection Toggle
             Switch(
                 checked = isProtectionEnabled,
-                onCheckedChange = { viewModel.toggleProtection() },
+                onCheckedChange = { viewModel.setProtectionEnabled(it) },
                 colors = SwitchDefaults.colors(
                     checkedThumbColor = Color.White,
                     checkedTrackColor = GuardianGreen,
@@ -125,10 +125,10 @@ fun HomeScreen(viewModel: GuardianViewModel) {
             StatCard(
                 modifier = Modifier.weight(1f),
                 icon = Icons.Default.Usb,
-                iconTint = if (isUsbDebugEnabled) GuardianRed else GuardianBlue,
+                iconTint = if (isUsbMonitorEnabled) GuardianGreen else GuardianSurfaceVariant,
                 title = "USB",
-                value = if (isUsbDebugEnabled) "ON" else "OFF",
-                onClick = { viewModel.toggleUsbDebug() }
+                value = if (isUsbMonitorEnabled) "ON" else "OFF",
+                onClick = { viewModel.setUsbMonitorEnabled(!isUsbMonitorEnabled) }
             )
             
             StatCard(
@@ -136,7 +136,8 @@ fun HomeScreen(viewModel: GuardianViewModel) {
                 icon = Icons.Default.Block,
                 iconTint = GuardianPink,
                 title = "Blocked",
-                value = stats.threatsBlocked.toString()
+                value = stats.threatsBlocked.toString(),
+                onClick = { }
             )
             
             StatCard(
@@ -144,7 +145,8 @@ fun HomeScreen(viewModel: GuardianViewModel) {
                 icon = Icons.Default.CheckCircle,
                 iconTint = GuardianYellow,
                 title = "Scanned",
-                value = stats.appsScanned.toString()
+                value = stats.appsScanned.toString(),
+                onClick = { }
             )
         }
         
@@ -164,20 +166,135 @@ fun HomeScreen(viewModel: GuardianViewModel) {
         ) {
             QuickActionCard(
                 modifier = Modifier.weight(1f),
-                icon = Icons.Default.Security,
+                icon = Icons.Default.Search,
                 title = "Quick Scan",
                 subtitle = "Scan now",
                 iconTint = GuardianGreen,
-                onClick = { /* TODO: Implement scan */ }
+                onClick = { viewModel.startScan() }
             )
             
             QuickActionCard(
                 modifier = Modifier.weight(1f),
                 icon = Icons.Default.Apps,
                 title = "Apps",
-                subtitle = "Manage",
+                subtitle = "Blacklist",
                 iconTint = GuardianBlue,
-                onClick = { /* TODO */ }
+                onClick = { /* Navigate to blacklist */ }
+            )
+        }
+        
+        Spacer(modifier = Modifier.height(24.dp))
+        
+        // Individual Module Toggles
+        Text(
+            text = "Protection Modules",
+            style = MaterialTheme.typography.titleMedium,
+            color = Color.White,
+            modifier = Modifier.padding(bottom = 12.dp)
+        )
+        
+        ModuleToggleCard(
+            icon = Icons.Default.Usb,
+            title = "USB Debug Monitor",
+            subtitle = "Alert if USB debugging is enabled",
+            isEnabled = isUsbMonitorEnabled,
+            onToggle = { viewModel.setUsbMonitorEnabled(it) },
+            enabledColor = GuardianGreen
+        )
+        
+        Spacer(modifier = Modifier.height(8.dp))
+        
+        ModuleToggleCard(
+            icon = Icons.Default.Sms,
+            title = "SMS Filter",
+            subtitle = "Block scam and fraud SMS",
+            isEnabled = viewModel.isSmsFilterEnabled.collectAsState().value,
+            onToggle = { viewModel.setSmsFilterEnabled(it) },
+            enabledColor = GuardianBlue
+        )
+        
+        Spacer(modifier = Modifier.height(8.dp))
+        
+        ModuleToggleCard(
+            icon = Icons.Default.Phone,
+            title = "Call Filter",
+            subtitle = "Block suspicious calls",
+            isEnabled = viewModel.isCallFilterEnabled.collectAsState().value,
+            onToggle = { viewModel.setCallFilterEnabled(it) },
+            enabledColor = GuardianPink
+        )
+        
+        Spacer(modifier = Modifier.height(8.dp))
+        
+        ModuleToggleCard(
+            icon = Icons.Default.Install,
+            title = "App Monitor",
+            subtitle = "Track app installations",
+            isEnabled = viewModel.isAppMonitorEnabled.collectAsState().value,
+            onToggle = { viewModel.setAppMonitorEnabled(it) },
+            enabledColor = GuardianYellow
+        )
+    }
+}
+
+@Composable
+private fun ModuleToggleCard(
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    title: String,
+    subtitle: String,
+    isEnabled: Boolean,
+    onToggle: (Boolean) -> Unit,
+    enabledColor: Color
+) {
+    Card(
+        shape = RoundedCornerShape(12.dp),
+        colors = CardDefaults.cardColors(containerColor = GuardianSurface)
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(40.dp)
+                    .clip(RoundedCornerShape(10.dp))
+                    .background(if (isEnabled) enabledColor.copy(alpha = 0.2f) else GuardianSurfaceVariant),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    imageVector = icon,
+                    contentDescription = title,
+                    tint = if (isEnabled) enabledColor else Color.Gray,
+                    modifier = Modifier.size(20.dp)
+                )
+            }
+            
+            Spacer(modifier = Modifier.width(12.dp))
+            
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = title,
+                    style = MaterialTheme.typography.titleSmall,
+                    color = Color.White
+                )
+                Text(
+                    text = subtitle,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = Color.Gray
+                )
+            }
+            
+            Switch(
+                checked = isEnabled,
+                onCheckedChange = onToggle,
+                colors = SwitchDefaults.colors(
+                    checkedThumbColor = Color.White,
+                    checkedTrackColor = enabledColor,
+                    uncheckedThumbColor = Color.Gray,
+                    uncheckedTrackColor = GuardianSurfaceVariant
+                )
             )
         }
     }
