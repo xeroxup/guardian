@@ -24,6 +24,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.guardian.app.ui.theme.*
 import com.guardian.app.viewmodel.GuardianViewModel
+import kotlinx.coroutines.launch
 
 @Composable
 fun ScanScreen(viewModel: GuardianViewModel) {
@@ -32,6 +33,7 @@ fun ScanScreen(viewModel: GuardianViewModel) {
     val blacklist by viewModel.blacklist.collectAsState()
     var isScanning by remember { mutableStateOf(false) }
     var scanResults by remember { mutableStateOf<List<Pair<String, String>>>(emptyList()) }
+    val scope = rememberCoroutineScope()
     
     val infiniteTransition = rememberInfiniteTransition(label = "scan")
     val rotation by infiniteTransition.animateFloat(
@@ -94,7 +96,7 @@ fun ScanScreen(viewModel: GuardianViewModel) {
                         scanResults = emptyList()
                         
                         // Perform scan in background
-                        androidx.compose.runtime.LaunchedEffect(Unit) {
+                        scope.launch {
                             val pm = context.packageManager
                             val installedApps = pm.getInstalledApplications(PackageManager.GET_META_DATA)
                             val blacklistedPackages = blacklist.map { it.packageName }.toSet()
@@ -236,10 +238,10 @@ fun ScanScreen(viewModel: GuardianViewModel) {
             LazyColumn(
                 verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                items(scanResults) { (appName, packageName) ->
+                items(scanResults) { (appName, reason) ->
                     ThreatItem(
                         appName = appName,
-                        packageName = packageName
+                        reason = reason
                     )
                 }
             }
