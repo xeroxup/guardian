@@ -75,7 +75,7 @@ fun EventsScreen(viewModel: GuardianViewModel) {
                             imageVector = Icons.Outlined.History,
                             contentDescription = null,
                             modifier = Modifier.size(64.dp),
-                            tint = if (isDarkTheme) GuardianSurfaceVariant else GuardianSurfaceVariantLight
+                            tint = if (isDarkTheme) Color(0xFF1A1C26) else Color(0xFFE2E8F0)
                         )
                         Spacer(modifier = Modifier.height(16.dp))
                         Text(
