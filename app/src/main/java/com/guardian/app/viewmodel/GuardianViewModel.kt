@@ -123,9 +123,6 @@ class GuardianViewModel(application: Application) : AndroidViewModel(application
     // Scan with real threat detection
     fun startScan() {
         viewModelScope.launch {
-            // Reset threat counter before scanning
-            repository.resetBlockedCount()
-            
             try {
                 val pm = getApplication<Application>().packageManager
                 val packages = pm.getInstalledApplications(PackageManager.GET_META_DATA)
@@ -155,7 +152,6 @@ class GuardianViewModel(application: Application) : AndroidViewModel(application
                     if (blacklisted.contains(packageInfo.packageName)) {
                         threatsFound++
                         detectedThreats.add(appName to "Blacklisted app")
-                        repository.incrementBlockedCount()
                         repository.addEvent(
                             EventType.APP_BLOCKED,
                             "⚠️ Blacklisted App",
@@ -205,7 +201,6 @@ class GuardianViewModel(application: Application) : AndroidViewModel(application
                             else -> "Potential threat"
                         }
                         detectedThreats.add(appName to reason)
-                        repository.incrementBlockedCount()
                         repository.addEvent(
                             EventType.APP_BLOCKED,
                             "⚠️ Suspicious App",
@@ -218,8 +213,8 @@ class GuardianViewModel(application: Application) : AndroidViewModel(application
                     kotlinx.coroutines.delay(2)
                 }
                 
-                // Update stats
-                repository.updateScanStats(packages.size)
+                // Update stats with threats found
+                repository.updateScanStatsWithThreats(packages.size, threatsFound)
                 
                 if (threatsFound > 0) {
                     repository.addEvent(
@@ -301,7 +296,6 @@ class GuardianViewModel(application: Application) : AndroidViewModel(application
                             
                             if (result.result.isInfected) {
                                 threatsFound++
-                                repository.incrementBlockedCount()
                                 repository.addEvent(
                                     EventType.APP_BLOCKED,
                                     "🦠 VirusTotal Threat",
@@ -333,6 +327,9 @@ class GuardianViewModel(application: Application) : AndroidViewModel(application
                 }
                 
                 _virusTotalResults.value = resultsMap
+                
+                // Update stats with VT threats
+                repository.updateScanStatsWithThreats(resultsMap.size, threatsFound)
                 
                 repository.addEvent(
                     EventType.SCAN_COMPLETED,
