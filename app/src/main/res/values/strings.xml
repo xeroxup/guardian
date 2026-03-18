@@ -37,4 +37,11 @@
     <string name="general_protection">Protection</string>
     <string name="general_protection_desc">Enable or disable protection</string>
     <string name="usb_debugging">USB Debugging</string>
+    <string name="usb_debugging_status_off">USB Debugging: OFF</string>
+    <string name="reset_stats">Reset Stats</string>
+    <string name="version">Version</string>
+    <string name="delete">Delete</string>
+    <string name="blacklist">Blacklist</string>
+    <string name="log">Log</string>
+    <string name="settings">Settings</string>
 </resources>
