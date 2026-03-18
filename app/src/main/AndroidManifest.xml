@@ -46,8 +46,7 @@
             android:name=".service.GuardianMonitorService"
             android:enabled="true"
             android:exported="false"
-            android:foregroundServiceType="specialUse"
-            android:description="Мониторинг безопасности установки приложений" />
+            android:foregroundServiceType="specialUse" />
 
         <!-- App Monitor - tracks installations -->
         <receiver
