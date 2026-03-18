@@ -19,12 +19,12 @@ import com.guardian.app.viewmodel.GuardianViewModel
 
 sealed class Screen(val route: String, val title: String, val icon: ImageVector) {
     object Home : Screen("home", "Shield", Icons.Default.Shield)
-    object Blacklist : Screen("blacklist", "Block", Icons.Default.Block)
+    object Scan : Screen("scan", "Scan", Icons.Default.Security)
     object Events : Screen("events", "Events", Icons.Default.History)
     object Settings : Screen("settings", "Settings", Icons.Default.Settings)
 }
 
-val screens = listOf(Screen.Home, Screen.Blacklist, Screen.Events, Screen.Settings)
+val screens = listOf(Screen.Home, Screen.Scan, Screen.Events, Screen.Settings)
 
 @Composable
 fun GuardianNavigation() {
@@ -69,7 +69,7 @@ fun GuardianNavigation() {
             modifier = Modifier.padding(innerPadding)
         ) {
             composable(Screen.Home.route) { HomeScreen(viewModel) }
-            composable(Screen.Blacklist.route) { BlacklistScreen(viewModel) }
+            composable(Screen.Scan.route) { ScanScreen(viewModel) }
             composable(Screen.Events.route) { EventsScreen(viewModel) }
             composable(Screen.Settings.route) { SettingsScreen(viewModel) }
         }
