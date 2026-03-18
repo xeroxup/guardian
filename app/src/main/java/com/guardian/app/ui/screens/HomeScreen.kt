@@ -31,6 +31,10 @@ fun HomeScreen(
     val stats by viewModel.stats.collectAsState()
     val events by viewModel.events.collectAsState()
     val isDarkTheme by viewModel.isDarkTheme.collectAsState()
+    val context = androidx.compose.ui.platform.LocalContext.current
+    
+    // Check USB debugging state
+    val isUsbDebuggingEnabled = viewModel.isUsbDebuggingEnabled
     
     // Theme-aware colors
     val backgroundColor = if (isDarkTheme) GuardianBackground else GuardianBackgroundLight
@@ -219,6 +223,68 @@ fun HomeScreen(
         
         Spacer(modifier = Modifier.height(16.dp))
         
+        // USB Debugging Warning Card
+        if (isUsbDebuggingEnabled) {
+            Card(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable {
+                        val intent = viewModel.openDeveloperSettings()
+                        context.startActivity(intent)
+                    },
+                shape = RoundedCornerShape(16.dp),
+                colors = CardDefaults.cardColors(
+                    containerColor = GuardianRed.copy(alpha = 0.15f)
+                ),
+                elevation = CardDefaults.cardElevation(defaultElevation = if (isDarkTheme) 0.dp else 2.dp)
+            ) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(16.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .size(48.dp)
+                            .background(GuardianRed.copy(alpha = 0.2f), CircleShape),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Warning,
+                            contentDescription = null,
+                            modifier = Modifier.size(28.dp),
+                            tint = GuardianRed
+                        )
+                    }
+                    
+                    Spacer(modifier = Modifier.width(16.dp))
+                    
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = "USB отладка включена",
+                            style = MaterialTheme.typography.titleMedium,
+                            color = GuardianRed,
+                            fontWeight = FontWeight.SemiBold
+                        )
+                        Text(
+                            text = "Нажмите, чтобы открыть настройки разработчика и выключить",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = if (isDarkTheme) Color.Gray else Color(0xFF64748B)
+                        )
+                    }
+                    
+                    Icon(
+                        imageVector = Icons.Default.ChevronRight,
+                        contentDescription = null,
+                        tint = GuardianRed
+                    )
+                }
+            }
+            
+            Spacer(modifier = Modifier.height(16.dp))
+        }
+        
         // Stats Cards
         Row(
             modifier = Modifier.fillMaxWidth(),
@@ -227,11 +293,11 @@ fun HomeScreen(
             StatCard(
                 modifier = Modifier.weight(1f),
                 icon = Icons.Default.Usb,
-                iconTint = if (isUsbMonitorEnabled) GuardianGreen else Color.Gray,
+                iconTint = if (isUsbDebuggingEnabled) GuardianRed else if (isUsbMonitorEnabled) GuardianGreen else Color.Gray,
                 title = "USB",
-                value = if (isUsbMonitorEnabled) "ВКЛ" else "ВЫКЛ",
+                value = if (isUsbDebuggingEnabled) "⚠️" else if (isUsbMonitorEnabled) "ВКЛ" else "ВЫКЛ",
                 isDarkTheme = isDarkTheme,
-                onClick = { viewModel.setUsbMonitorEnabled(!isUsbMonitorEnabled) }
+                onClick = { }
             )
             
             StatCard(

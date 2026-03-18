@@ -645,14 +645,9 @@ fun ScanScreen(viewModel: GuardianViewModel) {
             ActivityResultContracts.GetContent()
         ) { uri: Uri? ->
             uri?.let { selectedUri ->
-                // Get file path from URI
-                val filePath = getPathFromUri(context, selectedUri)
-                if (filePath != null) {
-                    viewModel.scanApk(filePath) { isThreat, message ->
-                        apkResult = message
-                    }
-                } else {
-                    apkResult = "❌ Не удалось получить путь к файлу"
+                // Pass URI directly to ViewModel for scanning
+                viewModel.scanApkUri(context, selectedUri) { isThreat, message ->
+                    apkResult = message
                 }
             }
         }

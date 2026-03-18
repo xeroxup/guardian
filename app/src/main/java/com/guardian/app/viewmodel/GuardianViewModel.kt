@@ -42,6 +42,13 @@ class GuardianViewModel(application: Application) : AndroidViewModel(application
     val isCallFilterEnabled = repository.isCallFilterEnabled.stateIn(viewModelScope, SharingStarted.Eagerly, true)
     val isAppMonitorEnabled = repository.isAppMonitorEnabled.stateIn(viewModelScope, SharingStarted.Eagerly, true)
     
+    // USB Debug state - check actual system setting
+    val isUsbDebuggingEnabled: Boolean
+        get() = android.provider.Settings.Global.getInt(
+            getApplication<Application>().contentResolver,
+            android.provider.Settings.Global.ADB_ENABLED, 0
+        ) == 1
+    
     // Data
     val blacklist = repository.blacklist.stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
     val events = repository.events.stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
@@ -85,6 +92,11 @@ class GuardianViewModel(application: Application) : AndroidViewModel(application
                 "USB monitoring ${if (enabled) "enabled" else "disabled"}"
             )
         }
+    }
+    
+    // Open developer settings to disable USB debugging
+    fun openDeveloperSettings(): android.content.Intent {
+        return android.content.Intent(android.provider.Settings.ACTION_APPLICATION_DEVELOPMENT_SETTINGS)
     }
     
     fun setSmsFilterEnabled(enabled: Boolean) {
@@ -221,7 +233,8 @@ class GuardianViewModel(application: Application) : AndroidViewModel(application
                     "com.android", "com.google.android", "android",
                     "com.samsung", "com.miui", "com.huawei", "com.xiaomi",
                     "com.oppo", "com.vivo", "com.oneplus", "com.sony",
-                    "com.lge", "com.motorola", "com.asus"
+                    "com.lge", "com.motorola", "com.asus",
+                    "ru.yandex", "com.yandex"
                 )
                 
                 // Known trusted apps (popular legitimate apps that should never be flagged)
@@ -298,10 +311,40 @@ class GuardianViewModel(application: Application) : AndroidViewModel(application
                     "com.spotify.music",
                     "com.apple.android.music",
                     "com.yandex.music",
+                    "ru.yandex.music",
+                    "ru.yandex.music.plugin",
                     "com.vkontakte.android",
                     "com.vk.music",
                     "com.kinopoisk",
                     "com.ok.android",
+                    
+                    // Yandex apps
+                    "ru.yandex.searchplugin",
+                    "ru.yandex.yandexmaps",
+                    "ru.yandex.yandexnavi",
+                    "ru.yandex.taxi",
+                    "ru.yandex.uber",
+                    "ru.yandex.disk",
+                    "ru.yandex.mail",
+                    "ru.yandex.weather",
+                    "ru.yandex.translate",
+                    "ru.yandex.browser",
+                    "ru.yandex.searchapp",
+                    "ru.yandex.speechkit",
+                    "com.yandex.browser",
+                    "com.yandex.launcher",
+                    "ru.yandex.drive",
+                    "ru.yandex.metro",
+                    "ru.yandex.rasp",
+                    "ru.yandex.auto",
+                    "ru.yandex.broker",
+                    "ru.yandex.money",
+                    "ru.yandex.yandexmoney",
+                    "ru.yandex.yandexpay",
+                    "ru.yandex.yandexapp",
+                    "ru.yandex.lavka",
+                    "ru.yandex.food",
+                    "ru.yandex.eda",
                     
                     // Shopping/Food
                     "com.yandex.food",
@@ -333,11 +376,13 @@ class GuardianViewModel(application: Application) : AndroidViewModel(application
                 for (packageInfo in packages) {
                     val packageName = packageInfo.packageName.lowercase()
                     val appName = pm.getApplicationLabel(packageInfo).toString()
-                    val isSystemApp = (packageInfo.flags and ApplicationInfo.FLAG_SYSTEM) != 0
+                    val isSystemApp = (packageInfo.flags and ApplicationInfo.FLAG_SYSTEM) != 0 ||
+                                       (packageInfo.flags and ApplicationInfo.FLAG_UPDATED_SYSTEM_APP) != 0
                     
                     // Skip trusted apps immediately
                     if (trustedApps.contains(packageInfo.packageName) || 
-                        trustedApps.any { packageName == it.lowercase() }) {
+                        trustedApps.any { packageName == it.lowercase() } ||
+                        isSystemApp) {
                         // Add as safe app
                         val scanResult = com.guardian.app.ui.screens.AppScanResult(
                             packageName = packageInfo.packageName,
@@ -737,18 +782,37 @@ class GuardianViewModel(application: Application) : AndroidViewModel(application
         }
     }
     
-    // APK Scanner - scan a single APK file
-    fun scanApk(apkPath: String, onResult: (Boolean, String) -> Unit) {
+    // APK Scanner - scan a single APK file using URI
+    fun scanApkUri(context: Context, uri: android.net.Uri, onResult: (Boolean, String) -> Unit) {
         viewModelScope.launch {
             try {
-                val context = getApplication<Application>()
                 val pm = context.packageManager
                 
-                // Get package info from APK
-                val packageInfo = pm.getPackageArchiveInfo(apkPath, PackageManager.GET_PERMISSIONS)
+                // Open input stream from URI and copy to temp file
+                val tempFile = java.io.File.createTempFile("scan_", ".apk", context.cacheDir)
+                
+                try {
+                    context.contentResolver.openInputStream(uri)?.use { input ->
+                        tempFile.outputStream().use { output ->
+                            input.copyTo(output)
+                        }
+                    } ?: run {
+                        onResult(false, "❌ Не удалось открыть файл")
+                        return@launch
+                    }
+                } catch (e: Exception) {
+                    onResult(false, "❌ Ошибка чтения файла: ${e.message}")
+                    return@launch
+                }
+                
+                // Get package info from temp APK file
+                val packageInfo = pm.getPackageArchiveInfo(tempFile.absolutePath, PackageManager.GET_PERMISSIONS)
+                
+                // Clean up temp file
+                tempFile.delete()
                 
                 if (packageInfo == null) {
-                    onResult(false, "Не удалось прочитать APK файл")
+                    onResult(false, "❌ Не удалось прочитать APK файл")
                     return@launch
                 }
                 
