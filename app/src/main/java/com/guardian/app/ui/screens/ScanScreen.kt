@@ -491,16 +491,16 @@ private fun VirusTotalThreatItem(
     packageName: String,
     result: VirusTotalResult
 ) {
-    val pm = try {
-        androidx.compose.ui.platform.LocalContext.current.packageManager
-    } catch (e: Exception) { null }
-    
-    val appName = try {
-        pm?.getApplicationLabel(
-            pm.getApplicationInfo(packageName, 0)
-        )?.toString() ?: packageName
-    } catch (e: Exception) {
-        packageName
+    val context = androidx.compose.ui.platform.LocalContext.current
+    val pm = context.packageManager
+    val appName = remember(packageName) {
+        try {
+            pm.getApplicationLabel(
+                pm.getApplicationInfo(packageName, 0)
+            ).toString()
+        } catch (e: Exception) {
+            packageName
+        }
     }
     
     Card(
