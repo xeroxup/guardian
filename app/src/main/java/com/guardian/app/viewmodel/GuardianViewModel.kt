@@ -1,14 +1,18 @@
 package com.guardian.app.viewmodel
 
 import android.app.Application
+import android.content.pm.PackageManager
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.guardian.app.data.model.AppStats
 import com.guardian.app.data.model.BlacklistedApp
+import com.guardian.app.data.model.EventType
 import com.guardian.app.data.model.SecurityEvent
 import com.guardian.app.data.repository.GuardianRepository
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 class GuardianViewModel(application: Application) : AndroidViewModel(application) {
     
@@ -37,13 +41,13 @@ class GuardianViewModel(application: Application) : AndroidViewModel(application
             
             if (newValue) {
                 repository.addEvent(
-                    com.guardian.app.data.model.EventType.PROTECTION_ENABLED,
+                    EventType.PROTECTION_ENABLED,
                     "🛡️ Protection Enabled",
                     "Active monitoring started"
                 )
             } else {
                 repository.addEvent(
-                    com.guardian.app.data.model.EventType.PROTECTION_DISABLED,
+                    EventType.PROTECTION_DISABLED,
                     "⚠️ Protection Disabled",
                     "Device is vulnerable"
                 )
@@ -58,13 +62,13 @@ class GuardianViewModel(application: Application) : AndroidViewModel(application
             
             if (newValue) {
                 repository.addEvent(
-                    com.guardian.app.data.model.EventType.USB_ENABLED,
+                    EventType.USB_ENABLED,
                     "🔌 USB Debug Enabled",
                     "Security risk detected"
                 )
             } else {
                 repository.addEvent(
-                    com.guardian.app.data.model.EventType.USB_DISABLED,
+                    EventType.USB_DISABLED,
                     "✅ USB Debug Disabled",
                     "Threat removed"
                 )
@@ -76,7 +80,7 @@ class GuardianViewModel(application: Application) : AndroidViewModel(application
         viewModelScope.launch {
             repository.addToBlacklist(BlacklistedApp(name = name, packageName = packageName))
             repository.addEvent(
-                com.guardian.app.data.model.EventType.APP_BLOCKED,
+                EventType.APP_BLOCKED,
                 "🚫 App Blocked",
                 "$name has been blocked",
                 packageName
@@ -95,7 +99,7 @@ class GuardianViewModel(application: Application) : AndroidViewModel(application
         return repository.isPackageBlacklisted(packageName)
     }
     
-    fun addEvent(type: com.guardian.app.data.model.EventType, title: String, description: String, packageName: String? = null) {
+    fun addEvent(type: EventType, title: String, description: String, packageName: String? = null) {
         viewModelScope.launch {
             repository.addEvent(type, title, description, packageName)
         }
@@ -111,13 +115,47 @@ class GuardianViewModel(application: Application) : AndroidViewModel(application
         viewModelScope.launch {
             isScanning.value = true
             try {
-                // Simulate scan - in real app would check installed apps
-                kotlinx.coroutines.delay(2000)
-                repository.updateScanStats(50)
+                val app = getApplication<Application>()
+                val pm = app.packageManager
+                val packages = withContext(Dispatchers.IO) {
+                    pm.getInstalledApplications(PackageManager.GET_META_DATA)
+                }
+                
+                val blockedApps = blacklist.value
+                var threatsFound = 0
+                
+                for (packageInfo in packages) {
+                    // Check if app is on blacklist
+                    if (blockedApps.any { it.packageName == packageInfo.packageName }) {
+                        threatsFound++
+                        repository.addEvent(
+                            EventType.APP_BLOCKED,
+                            "🚫 Threat Detected",
+                            "${packageInfo.packageName} is blacklisted"
+                        )
+                    }
+                }
+                
+                repository.updateScanStats(packages.size)
+                
+                if (threatsFound > 0) {
+                    repository.addEvent(
+                        EventType.SCAN_COMPLETED,
+                        "⚠️ Scan Complete",
+                        "Found $threatsFound threats"
+                    )
+                } else {
+                    repository.addEvent(
+                        EventType.SCAN_COMPLETED,
+                        "✅ Scan Complete",
+                        "Scanned ${packages.size} apps - no threats"
+                    )
+                }
+            } catch (e: Exception) {
                 repository.addEvent(
-                    com.guardian.app.data.model.EventType.SCAN_COMPLETED,
-                    "✅ Scan Completed",
-                    "Scanned 50 apps - no threats found"
+                    EventType.SCAN_COMPLETED,
+                    "❌ Scan Failed",
+                    e.message ?: "Unknown error"
                 )
             } finally {
                 isScanning.value = false

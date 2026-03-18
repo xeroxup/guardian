@@ -52,10 +52,14 @@
             </intent-filter>
         </receiver>
 
-        <!-- Usage Stats Receiver -->
+        <!-- USB Debug Receiver -->
         <receiver
-            android:name=".receiver.UsageStatsReceiver"
-            android:exported="true" />
+            android:name=".receiver.UsbDebugReceiver"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.hardware.usb.action.USB_STATE" />
+            </intent-filter>
+        </receiver>
 
     </application>
 

@@ -53,4 +53,11 @@
     <string name="scan">Scan</string>
     <string name="scanning">Scanning...</string>
     <string name="scan_complete">Scan Complete</string>
+    <string name="app_blocked">App Blocked</string>
+    <string name="app_installed">App Installed</string>
+    <string name="app_removed">App Removed</string>
+    <string name="device_boot">Device Boot</string>
+    <string name="usb_connected">USB Connected</string>
+    <string name="usb_warning">USB Warning</string>
+    <string name="usb_connected_message">USB connected - ensure debugging is disabled</string>
 </resources>
