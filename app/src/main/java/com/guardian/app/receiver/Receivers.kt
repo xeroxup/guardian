@@ -368,6 +368,10 @@ private fun analyzeCall(number: String): Pair<Boolean, String> {
 
 // ==================== USB DEBUGGING ====================
 
+// Track USB debugging state
+private var lastUsbDebuggingState = false
+private var usbDebuggingCheckInterval: java.util.Timer? = null
+
 private fun isUsbDebuggingEnabled(context: Context): Boolean {
     return try {
         val secure = android.provider.Settings.Secure::class.java
@@ -376,6 +380,111 @@ private fun isUsbDebuggingEnabled(context: Context): Boolean {
         result == 1
     } catch (e: Exception) {
         false
+    }
+}
+
+private fun isUsbConnected(context: Context): Boolean {
+    return try {
+        val intent = context.registerReceiver(null, android.content.IntentFilter("android.hardware.usb.action.USB_STATE"))
+        intent?.getBooleanExtra("connected", false) ?: false
+    } catch (e: Exception) {
+        false
+    }
+}
+
+private fun startUsbDebuggingMonitor(context: Context) {
+    // Cancel any existing timer
+    usbDebuggingCheckInterval?.cancel()
+    
+    // Check immediately
+    val currentState = isUsbDebuggingEnabled(context)
+    lastUsbDebuggingState = currentState
+    
+    // Start periodic checking
+    usbDebuggingCheckInterval = java.util.Timer().apply {
+        scheduleAtFixedRate(object : java.util.TimerTask() {
+            override fun run() {
+                CoroutineScope(Dispatchers.IO).launch {
+                    checkUsbDebuggingStateChange(context)
+                }
+            }
+        }, 5000, 5000) // Check every 5 seconds
+    }
+}
+
+private suspend fun checkUsbDebuggingStateChange(context: Context) {
+    try {
+        if (!isProtectionAndModuleEnabled(context, "usb")) return
+        
+        val currentState = isUsbDebuggingEnabled(context)
+        val isConnected = isUsbConnected(context)
+        
+        // State changed from disabled to enabled
+        if (currentState && !lastUsbDebuggingState) {
+            lastUsbDebuggingState = true
+            
+            val title = if (isConnected) {
+                "🚨 КРИТИЧЕСКАЯ УГРОЗА! USB отладка + подключение"
+            } else {
+                "⚠️ USB отладка включена"
+            }
+            
+            val message = if (isConnected) {
+                "Устройство подключено по USB с включенной отладкой! Немедленно отключите!"
+            } else {
+                "USB отладка включена. Это позволяет получить полный доступ к устройству."
+            }
+            
+            // Log event
+            logEvent(
+                context,
+                EventType.USB_ENABLED,
+                title,
+                message
+            )
+            
+            // Show notification
+            showNotification(
+                context,
+                title,
+                message,
+                "usb_debug_enabled"
+            )
+        }
+        // USB cable connected while debugging is enabled
+        else if (currentState && isConnected && lastUsbNotificationTime > 0) {
+            val timeSinceLastNotification = System.currentTimeMillis() - lastUsbNotificationTime
+            if (timeSinceLastNotification > 300000) { // 5 minutes
+                lastUsbNotificationTime = System.currentTimeMillis()
+                
+                showNotification(
+                    context,
+                    "⚠️ Устройство подключено по USB",
+                    "USB отладка активна. Отключите отладку в настройках разработчика.",
+                    "usb_connected_debug"
+                )
+            }
+        }
+        // State changed from enabled to disabled
+        else if (!currentState && lastUsbDebuggingState) {
+            lastUsbDebuggingState = false
+            
+            logEvent(
+                context,
+                EventType.USB_DISABLED,
+                "✅ USB отладка отключена",
+                "Устройство в безопасности"
+            )
+            
+            showNotification(
+                context,
+                "✅ USB отладка отключена",
+                "Устройство защищено",
+                "usb_debug_disabled"
+            )
+        }
+    } catch (e: Exception) {
+        // Ignore errors
     }
 }
 
@@ -545,53 +654,154 @@ class CallReceiver : BroadcastReceiver() {
     }
 }
 
-// Enhanced USB Debugging Monitor
+// Enhanced USB Debugging Monitor with comprehensive security checks
 class UsbMonitorReceiver : BroadcastReceiver() {
+    companion object {
+        private var lastAdbState: Boolean? = null
+        private var lastNotificationTime = 0L
+        private const val NOTIFICATION_COOLDOWN = 300000L // 5 minutes
+        
+        // Known forensic/crime lab tools that use ADB
+        private val FORENSIC_TOOLS = listOf(
+            "com.cellebrite",
+            "com.msab.xry",
+            "com.oxygen",
+            "com.elcomsoft",
+            "com.susteen",
+            "com.paraben",
+            "com.blackbag",
+            "com.magnetforensics",
+            "com.solutionary"
+        )
+    }
+    
     override fun onReceive(context: Context, intent: Intent) {
         when (intent.action) {
             Intent.ACTION_BOOT_COMPLETED -> {
                 CoroutineScope(Dispatchers.IO).launch {
-                    checkUsbDebugging(context)
+                    performUsbSecurityCheck(context)
                 }
             }
             "android.hardware.usb.action.USB_STATE" -> {
-                if (intent.getBooleanExtra("connected", false)) {
-                    CoroutineScope(Dispatchers.IO).launch {
-                        checkUsbDebugging(context)
+                val connected = intent.getBooleanExtra("connected", false)
+                val configured = intent.getBooleanExtra("configured", false)
+                
+                CoroutineScope(Dispatchers.IO).launch {
+                    if (connected) {
+                        performUsbSecurityCheck(context, configured)
                     }
+                }
+            }
+            Intent.ACTION_POWER_CONNECTED -> {
+                CoroutineScope(Dispatchers.IO).launch {
+                    // Could be USB connection
+                    kotlinx.coroutines.delay(1000) // Wait for USB state to stabilize
+                    performUsbSecurityCheck(context)
                 }
             }
         }
     }
     
-    private suspend fun checkUsbDebugging(context: Context) {
+    private suspend fun performUsbSecurityCheck(context: Context, usbConfigured: Boolean = false) {
         try {
             if (!isProtectionAndModuleEnabled(context, "usb")) return
             
-            // Rate limit: only show notification once per hour
-            val currentTime = System.currentTimeMillis()
-            if (currentTime - lastUsbNotificationTime < 3600000) return
+            // Check ADB state
+            val adbEnabled = isUsbDebuggingEnabled(context)
             
-            if (isUsbDebuggingEnabled(context)) {
-                lastUsbNotificationTime = currentTime
-                
-                showNotification(
-                    context,
-                    "⚠️ Внимание! Отладка USB включена",
-                    "Это угроза безопасности. Отключите в Настройках разработчика.",
-                    "usb_debug"
-                )
-                
-                logEvent(
-                    context,
-                    EventType.USB_ENABLED,
-                    "⚠️ Обнаружена отладка USB",
-                    "Потенциальная угроза безопасности"
-                )
+            // Check if state changed from last check
+            if (lastAdbState == null) {
+                lastAdbState = adbEnabled
+                if (adbEnabled) {
+                    notifyAdbEnabled(context)
+                }
+            } else if (lastAdbState != adbEnabled) {
+                lastAdbState = adbEnabled
+                if (adbEnabled) {
+                    notifyAdbEnabled(context)
+                } else {
+                    notifyAdbDisabled(context)
+                }
+            } else if (adbEnabled) {
+                // ADB still enabled, check cooldown and notify
+                val currentTime = System.currentTimeMillis()
+                if (currentTime - lastNotificationTime >= NOTIFICATION_COOLDOWN) {
+                    notifyAdbEnabled(context, isReminder = true)
+                }
             }
+            
+            // Check for forensic tools regardless of ADB state
+            checkForForensicTools(context)
+            
         } catch (e: Exception) {
             // Ignore errors
         }
+    }
+    
+    private suspend fun notifyAdbEnabled(context: Context, isReminder: Boolean = false) {
+        lastNotificationTime = System.currentTimeMillis()
+        
+        val title = if (isReminder) "🔔 Напоминание: Отладка USB включена" else "🚨 ВНИМАНИЕ! Отладка USB АКТИВНА"
+        val message = if (isReminder) 
+            "Отладка USB все еще включена. Ваше устройство уязвимо для атак через компьютер."
+        else 
+            "Ваше устройство доступно для подключения к компьютеру! Злоумышленники могут извлечь данные без разблокировки."
+        
+        showNotification(
+            context,
+            title,
+            message,
+            "usb_debug_${System.currentTimeMillis()}"
+        )
+        
+        logEvent(
+            context,
+            EventType.USB_ENABLED,
+            title,
+            "Критическая угроза безопасности: устройство доступно через ADB. Любой компьютер может получить доступ к данным без PIN/пароля."
+        )
+    }
+    
+    private suspend fun notifyAdbDisabled(context: Context) {
+        logEvent(
+            context,
+            EventType.USB_DISABLED,
+            "✅ Отладка USB отключена",
+            "Устройство защищено от ADB-атак"
+        )
+    }
+    
+    private suspend fun checkForForensicTools(context: Context) {
+        try {
+            val pm = context.packageManager
+            val packages = pm.getInstalledApplications(PackageManager.GET_META_DATA)
+            
+            for (app in packages) {
+                val packageName = app.packageName.lowercase()
+                for (tool in FORENSIC_TOOLS) {
+                    if (packageName.contains(tool)) {
+                        val appName = pm.getApplicationLabel(app).toString()
+                        
+                        showNotification(
+                            context,
+                            "🚨 ОБНАРУЖЕНА КРИМИНАЛИСТИЧЕСКАЯ УТИЛИТА",
+                            "Приложение $appName ($packageName) может использоваться для извлечения данных с вашего устройства.",
+                            "forensic_tool"
+                        )
+                        
+                        logEvent(
+                            context,
+                            EventType.APP_BLOCKED,
+                            "🚨 Обнаружена криминалистическая утилита",
+                            "$appName ($packageName) - инструмент цифровой криминалистики, используемый полицией и спецслужбами для извлечения данных с телефонов. Может обходить шифрование при включенной отладке USB.",
+                            packageName
+                        )
+                        
+                        return
+                    }
+                }
+            }
+        } catch (e: Exception) { }
     }
 }
 

@@ -140,7 +140,7 @@ class GuardianViewModel(application: Application) : AndroidViewModel(application
         }
     }
     
-    // Scan with real threat detection
+    // Scan with advanced real threat detection
     fun startScan() {
         viewModelScope.launch {
             try {
@@ -149,106 +149,222 @@ class GuardianViewModel(application: Application) : AndroidViewModel(application
                 val blacklisted = blacklist.value.map { it.packageName }.toSet()
                 
                 var threatsFound = 0
-                val detectedThreats = mutableListOf<Pair<String, String>>()
+                val detectedThreats = mutableListOf<Triple<String, String, Int>>() // name, reason, riskScore
+                val scanResultsData = mutableListOf<com.guardian.app.ui.screens.AppScanResult>()
                 
-                // Known dangerous packages (real malware patterns) - more specific
-                val dangerousPatterns = listOf(
-                    // Actual malware patterns
-                    "trojan", "malware", "virus", "backdoor", "spyware",
-                    "keylog", "ransomware", "botnet", "worm", "rootkit",
-                    "stealer", "miner", "dropper", "injector", "hook",
-                    // Suspicious fake apps
-                    "free.vip", "free.premium", "free.pro", "hack.tool",
-                    "crack.tool", "bypass.premium", "cheat.game",
-                    // Known malware packages
-                    "com.android.vending.billing", // Fake billing
-                    "com.svidersk", "com.zmzpass", "com.crypt",
-                    "com.hack", "com.keylog", "com.spy",
-                    ".hacker", ".cracker", ".bypass"
+                // Known malware signatures and patterns
+                val malwareSignatures = mapOf(
+                    // Trojans
+                    "trojan" to 10, "backdoor" to 10, "rat" to 9,
+                    // Spyware
+                    "spyware" to 9, "spy" to 7, "keylog" to 10, "keylogger" to 10,
+                    "stealer" to 9, "password" to 5,
+                    // Ransomware
+                    "ransomware" to 10, "crypt" to 6, "encrypt" to 5,
+                    // Banking trojans
+                    "banker" to 10, "bankbot" to 10, "ankabot" to 10,
+                    // SMS fraud
+                    "smsfraud" to 9, "sms Trojan" to 10, "smspay" to 9,
+                    "premium" to 5, "subscription" to 4,
+                    // Miners
+                    "miner" to 8, "mining" to 7, "bitcoin" to 5, "crypto" to 4,
+                    // Adware
+                    "adware" to 6, "ads" to 3,
+                    // Riskware
+                    "riskware" to 7, "hack" to 7, "cracker" to 7, "bypass" to 6,
+                    "cheat" to 5, "mod" to 4, "patch" to 4,
+                    // Droppers
+                    "dropper" to 9, "loader" to 6, "injector" to 8,
+                    // Rootkits
+                    "rootkit" to 10, "root" to 4, "su" to 4,
+                    // Botnet
+                    "botnet" to 10, "bot" to 3, "zombie" to 6,
+                    // Worms
+                    "worm" to 9, "spread" to 4,
+                    // Fake apps
+                    "fake" to 7, "fraud" to 8, "phishing" to 9,
+                    // Specific known malware families
+                    "pegasus" to 10, "pegasusspy" to 10,
+                    "nso" to 10, "candiru" to 10,
+                    "anubis" to 10, "anubisthrat" to 10,
+                    "cerberus" to 10, "cerberusthrat" to 10,
+                    "eventbot" to 10, "gustuff" to 10,
+                    "teabot" to 10, "toddler" to 10,
+                    "sharkbot" to 10, "fluhorse" to 10,
+                    // Obfuscation
+                    "obfuscated" to 6, "packed" to 5
+                )
+                
+                // Suspicious package patterns with risk scores
+                val suspiciousPatterns = mapOf(
+                    "com.android.vending.billing" to 8, // Fake billing
+                    "com.svidersk" to 9,
+                    "com.zmzpass" to 9,
+                    "com.hack" to 8,
+                    "com.cheat" to 7,
+                    "com.crack" to 8,
+                    "com.mod" to 5,
+                    "free.vip" to 7,
+                    "free.premium" to 7,
+                    "free.pro" to 6,
+                    "hack.tool" to 9,
+                    "crack.tool" to 9,
+                    "bypass.premium" to 8,
+                    ".hacker" to 8,
+                    ".cracker" to 8,
+                    ".spy" to 8,
+                    ".steal" to 9
+                )
+                
+                // Known trusted system packages to exclude from threat detection
+                val trustedPackages = setOf(
+                    "com.android", "com.google.android", "android",
+                    "com.samsung", "com.miui", "com.huawei", "com.xiaomi",
+                    "com.oppo", "com.vivo", "com.oneplus", "com.sony",
+                    "com.lge", "com.motorola", "com.asus"
                 )
                 
                 // Check each app
                 for (packageInfo in packages) {
                     val packageName = packageInfo.packageName.lowercase()
                     val appName = pm.getApplicationLabel(packageInfo).toString()
+                    val isSystemApp = (packageInfo.flags and ApplicationInfo.FLAG_SYSTEM) != 0
+                    
+                    var riskScore = 0
+                    val threatReasons = mutableListOf<String>()
+                    var isThreat = false
                     
                     // Check 1: Blacklist match
                     if (blacklisted.contains(packageInfo.packageName)) {
-                        threatsFound++
-                        detectedThreats.add(appName to "Blacklisted app")
-                        repository.addEvent(
-                            EventType.APP_BLOCKED,
-                            "⚠️ Blacklisted App",
-                            "$appName - in your blocklist",
-                            packageInfo.packageName
-                        )
-                        continue
+                        riskScore += 10
+                        threatReasons.add("В черном списке")
+                        isThreat = true
                     }
                     
-                    // Check 2: Dangerous package name patterns
-                    val isDangerousPattern = dangerousPatterns.any { pattern ->
-                        packageName.contains(pattern.lowercase())
+                    // Check 2: Malware signatures in package name
+                    for ((signature, score) in malwareSignatures) {
+                        if (packageName.contains(signature.lowercase())) {
+                            riskScore += score
+                            threatReasons.add("Сигнатура: $signature")
+                        }
                     }
                     
-                    // Check 3: Suspicious permissions (dangerous SMS/Call/Camera perms)
-                    val hasSuspiciousPerms = try {
+                    // Check 3: Suspicious patterns in package name
+                    for ((pattern, score) in suspiciousPatterns) {
+                        if (packageName.contains(pattern.lowercase())) {
+                            riskScore += score
+                            threatReasons.add("Подозрительный паттерн: $pattern")
+                        }
+                    }
+                    
+                    // Check 4: Analyze permissions
+                    try {
                         val packageInfoFull = pm.getPackageInfo(packageInfo.packageName, PackageManager.GET_PERMISSIONS)
                         val requestedPermissions = packageInfoFull.requestedPermissions?.toList() ?: emptyList()
+                        
+                        // Critical permissions that indicate high risk
+                        val criticalPerms = listOf(
+                            "android.permission.BIND_ACCESSIBILITY_SERVICE",
+                            "android.permission.SYSTEM_ALERT_WINDOW"
+                        )
+                        
+                        // Dangerous permissions
                         val dangerousPerms = listOf(
-                            "android.permission.READ_SMS",
-                            "android.permission.RECEIVE_SMS", 
-                            "android.permission.SEND_SMS",
-                            "android.permission.READ_CALL_LOG",
-                            "android.permission.READ_CONTACTS",
-                            "android.permission.CAMERA",
-                            "android.permission.RECORD_AUDIO",
-                            "android.permission.ACCESS_FINE_LOCATION",
-                            "android.permission.READ_PHONE_STATE",
-                            "android.permission.PROCESS_OUTGOING_CALLS"
-                        )
-                        // Only flag if 3+ dangerous perms
-                        requestedPermissions.count { dangerousPerms.contains(it) } >= 3
-                    } catch (e: Exception) { false }
-                    
-                    // Check 4: System apps trying to do unusual things
-                    val isSystemApp = (packageInfo.flags and ApplicationInfo.FLAG_SYSTEM) != 0
-                    val isUpdatedSystemApp = (packageInfo.flags and ApplicationInfo.FLAG_UPDATED_SYSTEM_APP) != 0
-                    
-                    // Flag as threat if: blacklist match OR (dangerous name pattern AND not system) OR (very dangerous perms)
-                    // Only flag permissions for non-system apps to avoid false positives
-                    val hasVeryDangerousPerms = try {
-                        val packageInfoFull = pm.getPackageInfo(packageInfo.packageName, PackageManager.GET_PERMISSIONS)
-                        val requestedPermissions = packageInfoFull.requestedPermissions?.toList() ?: emptyList()
-                        val veryDangerousPerms = listOf(
                             "android.permission.READ_SMS",
                             "android.permission.SEND_SMS",
                             "android.permission.RECEIVE_SMS",
                             "android.permission.READ_CALL_LOG",
-                            "android.permission.PROCESS_OUTGOING_CALLS"
+                            "android.permission.PROCESS_OUTGOING_CALLS",
+                            "android.permission.CALL_PHONE",
+                            "android.permission.READ_CONTACTS",
+                            "android.permission.RECORD_AUDIO",
+                            "android.permission.CAMERA",
+                            "android.permission.ACCESS_FINE_LOCATION"
                         )
-                        // Only flag if has 2+ VERY dangerous perms
-                        requestedPermissions.count { veryDangerousPerms.contains(it) } >= 2
-                    } catch (e: Exception) { false }
-                    
-                    if (isDangerousPattern || hasVeryDangerousPerms) {
-                        threatsFound++
-                        val reason = when {
-                            isDangerousPattern -> "Подозрительное имя пакета"
-                            hasVeryDangerousPerms -> "Опасные разрешения"
-                            else -> "Потенциальная угроза"
+                        
+                        val criticalCount = requestedPermissions.count { criticalPerms.contains(it) }
+                        val dangerousCount = requestedPermissions.count { dangerousPerms.contains(it) }
+                        
+                        // High risk: accessibility service + SMS permissions (classic banking trojan pattern)
+                        if (criticalCount > 0 && dangerousCount >= 3) {
+                            riskScore += 8
+                            threatReasons.add("Критические разрешения (возможный банковский троян)")
                         }
-                        detectedThreats.add(appName to reason)
-                        repository.addEvent(
-                            EventType.APP_BLOCKED,
-                            "⚠️ Подозрительное приложение",
-                            "$appName - $reason",
-                            packageInfo.packageName
-                        )
+                        
+                        // Medium risk: many dangerous permissions
+                        if (dangerousCount >= 5) {
+                            riskScore += 4
+                            threatReasons.add("Много опасных разрешений ($dangerousCount)")
+                        }
+                        
+                        // Check for SMS fraud pattern
+                        val hasSmsPerms = requestedPermissions.any { it.contains("SMS") }
+                        val hasCallPerms = requestedPermissions.any { it.contains("CALL") }
+                        val hasContactPerms = requestedPermissions.contains("android.permission.READ_CONTACTS")
+                        
+                        if (hasSmsPerms && hasCallPerms && hasContactPerms && !isSystemApp) {
+                            // Check if it's not a known messaging app
+                            val isKnownMessaging = listOf("whatsapp", "telegram", "signal", "viber", "messages", "sms")
+                                .any { packageName.contains(it) }
+                            
+                            if (!isKnownMessaging) {
+                                riskScore += 5
+                                threatReasons.add("SMS/Call шпионаж")
+                            }
+                        }
+                        
+                    } catch (e: Exception) { }
+                    
+                    // Check 5: Heuristics - app name doesn't match package name pattern
+                    // Many malware apps have innocent names but suspicious packages
+                    if (!isSystemApp && riskScore >= 5) {
+                        // Already flagged, additional verification
+                        val isTrusted = trustedPackages.any { packageName.startsWith(it) }
+                        if (!isTrusted && riskScore >= 8) {
+                            isThreat = true
+                        }
                     }
                     
-                    // Small delay to simulate real scanning (longer for realism)
-                    kotlinx.coroutines.delay(2)
+                    // Determine if it's a threat based on risk score
+                    isThreat = isThreat || riskScore >= 7
+                    
+                    // Create scan result
+                    val scanResult = com.guardian.app.ui.screens.AppScanResult(
+                        packageName = packageInfo.packageName,
+                        appName = appName,
+                        isThreat = isThreat,
+                        threatType = if (isThreat) threatReasons.firstOrNull() ?: "Подозрительное приложение" else "",
+                        isSystemApp = isSystemApp
+                    )
+                    scanResultsData.add(scanResult)
+                    
+                    if (isThreat) {
+                        threatsFound++
+                        detectedThreats.add(Triple(appName, threatReasons.firstOrNull() ?: "Угроза обнаружена", riskScore))
+                        
+                        repository.addEvent(
+                            EventType.APP_BLOCKED,
+                            "⚠️ ${if (riskScore >= 9) "ВРЕДОНОСНОЕ" else "Подозрительное"} приложение",
+                            "$appName - ${threatReasons.joinToString(", ")} (риск: $riskScore/10)",
+                            packageInfo.packageName
+                        )
+                        
+                        // Show notification for high-risk threats
+                        if (riskScore >= 8) {
+                            NotificationHelper.showThreatFoundNotification(
+                                getApplication(),
+                                appName,
+                                threatReasons.firstOrNull() ?: "Высокий риск"
+                            )
+                        }
+                    }
+                    
+                    // Small delay for UI feedback
+                    kotlinx.coroutines.delay(1)
                 }
+                
+                // Save scan results for display
+                _scanResults.value = scanResultsData
                 
                 // Update stats with threats found
                 repository.updateScanStatsWithThreats(packages.size, threatsFound)
@@ -266,24 +382,32 @@ class GuardianViewModel(application: Application) : AndroidViewModel(application
                 if (threatsFound > 0) {
                     repository.addEvent(
                         EventType.SCAN_COMPLETED,
-                        "⚠️ Scan Complete",
-                        "Found $threatsFound potential threats in ${packages.size} apps"
+                        "⚠️ Обнаружено $threatsFound угроз",
+                        "Проверено ${packages.size} приложений"
                     )
                 } else {
                     repository.addEvent(
                         EventType.SCAN_COMPLETED,
-                        "✅ Scan Complete",
-                        "${packages.size} apps scanned - all safe"
+                        "✅ Сканирование завершено",
+                        "Угроз не обнаружено (${packages.size} приложений)"
                     )
                 }
             } catch (e: Exception) {
                 repository.addEvent(
                     EventType.SCAN_COMPLETED,
-                    "❌ Scan Failed",
-                    "Error: ${e.message}"
+                    "❌ Ошибка сканирования",
+                    "${e.message}"
                 )
             }
         }
+    }
+    
+    // Scan results for UI display
+    private val _scanResults = MutableStateFlow<List<com.guardian.app.ui.screens.AppScanResult>>(emptyList())
+    val scanResults: StateFlow<List<com.guardian.app.ui.screens.AppScanResult>> = _scanResults.asStateFlow()
+    
+    fun clearScanResults() {
+        _scanResults.value = emptyList()
     }
     
     // Reset stats

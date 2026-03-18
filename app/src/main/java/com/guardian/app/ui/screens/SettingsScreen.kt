@@ -2,6 +2,7 @@ package com.guardian.app.ui.screens
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
@@ -31,22 +32,28 @@ fun SettingsScreen(viewModel: GuardianViewModel) {
     var apiKeyInput by remember { mutableStateOf("") }
     var showApiKey by remember { mutableStateOf(false) }
     
+    // Theme-aware colors
+    val backgroundColor = if (isDarkTheme) GuardianBackground else GuardianBackgroundLight
+    val surfaceColor = if (isDarkTheme) GuardianSurface else GuardianSurfaceLight
+    val textColor = if (isDarkTheme) Color.White else Color(0xFF1E293B)
+    val grayText = if (isDarkTheme) Color.Gray else Color(0xFF64748B)
+    
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .background(GuardianBackground)
+            .background(backgroundColor)
             .padding(16.dp)
     ) {
         Text(
             text = "Настройки",
             style = MaterialTheme.typography.headlineLarge,
-            color = Color.White,
+            color = textColor,
             fontWeight = FontWeight.Bold
         )
         Text(
             text = "Настройка защиты",
             style = MaterialTheme.typography.bodyMedium,
-            color = Color.Gray
+            color = grayText
         )
         
         Spacer(modifier = Modifier.height(24.dp))
@@ -55,25 +62,26 @@ fun SettingsScreen(viewModel: GuardianViewModel) {
         Text(
             text = "ЗАЩИТА",
             style = MaterialTheme.typography.labelMedium,
-            color = GuardianPrimary,
+            color = if (isDarkTheme) GuardianPrimary else GuardianPrimaryLight,
             fontWeight = FontWeight.SemiBold,
             modifier = Modifier.padding(bottom = 12.dp)
         )
         
         SettingsItem(
             icon = Icons.Default.Shield,
-            iconTint = GuardianGreen,
+            iconTint = if (isDarkTheme) GuardianGreen else GuardianGreenLight,
             title = "Активная защита",
             subtitle = if (isProtectionEnabled) "Мониторинг включен" else "Мониторинг выключен",
+            isDarkTheme = isDarkTheme,
             trailing = {
                 Switch(
                     checked = isProtectionEnabled,
                     onCheckedChange = { viewModel.setProtectionEnabled(it) },
                     colors = SwitchDefaults.colors(
                         checkedThumbColor = Color.White,
-                        checkedTrackColor = GuardianGreen,
+                        checkedTrackColor = if (isDarkTheme) GuardianGreen else GuardianGreenLight,
                         uncheckedThumbColor = Color.White,
-                        uncheckedTrackColor = GuardianSurfaceVariant
+                        uncheckedTrackColor = if (isDarkTheme) GuardianSurfaceVariant else GuardianSurfaceVariantLight
                     )
                 )
             }
@@ -85,25 +93,26 @@ fun SettingsScreen(viewModel: GuardianViewModel) {
         Text(
             text = "ОФОРМЛЕНИЕ",
             style = MaterialTheme.typography.labelMedium,
-            color = GuardianPrimary,
+            color = if (isDarkTheme) GuardianPrimary else GuardianPrimaryLight,
             fontWeight = FontWeight.SemiBold,
             modifier = Modifier.padding(bottom = 12.dp)
         )
         
         SettingsItem(
             icon = if (isDarkTheme) Icons.Default.DarkMode else Icons.Default.LightMode,
-            iconTint = if (isDarkTheme) GuardianYellow else GuardianBlue,
+            iconTint = if (isDarkTheme) GuardianYellow else GuardianBlueLight,
             title = "Тёмная тема",
             subtitle = if (isDarkTheme) "Включена" else "Выключена",
+            isDarkTheme = isDarkTheme,
             trailing = {
                 Switch(
                     checked = isDarkTheme,
                     onCheckedChange = { viewModel.setDarkTheme(it) },
                     colors = SwitchDefaults.colors(
                         checkedThumbColor = Color.White,
-                        checkedTrackColor = GuardianPrimary,
+                        checkedTrackColor = if (isDarkTheme) GuardianPrimary else GuardianPrimaryLight,
                         uncheckedThumbColor = Color.White,
-                        uncheckedTrackColor = GuardianSurfaceVariant
+                        uncheckedTrackColor = if (isDarkTheme) GuardianSurfaceVariant else GuardianSurfaceVariantLight
                     )
                 )
             }
@@ -115,25 +124,26 @@ fun SettingsScreen(viewModel: GuardianViewModel) {
         Text(
             text = "БЕЗОПАСНОСТЬ",
             style = MaterialTheme.typography.labelMedium,
-            color = GuardianPrimary,
+            color = if (isDarkTheme) GuardianPrimary else GuardianPrimaryLight,
             fontWeight = FontWeight.SemiBold,
             modifier = Modifier.padding(bottom = 12.dp)
         )
         
         SettingsItem(
             icon = Icons.Default.Usb,
-            iconTint = if (isUsbMonitorEnabled) GuardianBlue else GuardianSurfaceVariant,
+            iconTint = if (isUsbMonitorEnabled) (if (isDarkTheme) GuardianBlue else GuardianBlueLight) else Color.Gray,
             title = "Мониторинг USB",
             subtitle = if (isUsbMonitorEnabled) "Включен" else "Выключен",
+            isDarkTheme = isDarkTheme,
             trailing = {
                 Switch(
                     checked = isUsbMonitorEnabled,
                     onCheckedChange = { viewModel.setUsbMonitorEnabled(it) },
                     colors = SwitchDefaults.colors(
                         checkedThumbColor = Color.White,
-                        checkedTrackColor = GuardianBlue,
+                        checkedTrackColor = if (isDarkTheme) GuardianBlue else GuardianBlueLight,
                         uncheckedThumbColor = Color.White,
-                        uncheckedTrackColor = GuardianSurfaceVariant
+                        uncheckedTrackColor = if (isDarkTheme) GuardianSurfaceVariant else GuardianSurfaceVariantLight
                     )
                 )
             }
@@ -141,18 +151,19 @@ fun SettingsScreen(viewModel: GuardianViewModel) {
         
         SettingsItem(
             icon = Icons.Default.Sms,
-            iconTint = GuardianBlue,
+            iconTint = if (isDarkTheme) GuardianBlue else GuardianBlueLight,
             title = "Фильтр SMS",
             subtitle = "Блокировка мошеннических SMS",
+            isDarkTheme = isDarkTheme,
             trailing = {
                 Switch(
                     checked = viewModel.isSmsFilterEnabled.collectAsState().value,
                     onCheckedChange = { viewModel.setSmsFilterEnabled(it) },
                     colors = SwitchDefaults.colors(
                         checkedThumbColor = Color.White,
-                        checkedTrackColor = GuardianBlue,
+                        checkedTrackColor = if (isDarkTheme) GuardianBlue else GuardianBlueLight,
                         uncheckedThumbColor = Color.White,
-                        uncheckedTrackColor = GuardianSurfaceVariant
+                        uncheckedTrackColor = if (isDarkTheme) GuardianSurfaceVariant else GuardianSurfaceVariantLight
                     )
                 )
             }
@@ -160,18 +171,19 @@ fun SettingsScreen(viewModel: GuardianViewModel) {
         
         SettingsItem(
             icon = Icons.Default.Phone,
-            iconTint = GuardianPink,
+            iconTint = if (isDarkTheme) GuardianPink else GuardianPinkLight,
             title = "Фильтр вызовов",
             subtitle = "Блокировка подозрительных вызовов",
+            isDarkTheme = isDarkTheme,
             trailing = {
                 Switch(
                     checked = viewModel.isCallFilterEnabled.collectAsState().value,
                     onCheckedChange = { viewModel.setCallFilterEnabled(it) },
                     colors = SwitchDefaults.colors(
                         checkedThumbColor = Color.White,
-                        checkedTrackColor = GuardianPink,
+                        checkedTrackColor = if (isDarkTheme) GuardianPink else GuardianPinkLight,
                         uncheckedThumbColor = Color.White,
-                        uncheckedTrackColor = GuardianSurfaceVariant
+                        uncheckedTrackColor = if (isDarkTheme) GuardianSurfaceVariant else GuardianSurfaceVariantLight
                     )
                 )
             }
@@ -179,18 +191,19 @@ fun SettingsScreen(viewModel: GuardianViewModel) {
         
         SettingsItem(
             icon = Icons.Default.Apps,
-            iconTint = GuardianYellow,
+            iconTint = if (isDarkTheme) GuardianYellow else GuardianYellowLight,
             title = "Мониторинг приложений",
             subtitle = "Отслеживание установки приложений",
+            isDarkTheme = isDarkTheme,
             trailing = {
                 Switch(
                     checked = viewModel.isAppMonitorEnabled.collectAsState().value,
                     onCheckedChange = { viewModel.setAppMonitorEnabled(it) },
                     colors = SwitchDefaults.colors(
                         checkedThumbColor = Color.White,
-                        checkedTrackColor = GuardianYellow,
+                        checkedTrackColor = if (isDarkTheme) GuardianYellow else GuardianYellowLight,
                         uncheckedThumbColor = Color.White,
-                        uncheckedTrackColor = GuardianSurfaceVariant
+                        uncheckedTrackColor = if (isDarkTheme) GuardianSurfaceVariant else GuardianSurfaceVariantLight
                     )
                 )
             }
@@ -202,16 +215,17 @@ fun SettingsScreen(viewModel: GuardianViewModel) {
         Text(
             text = "VIRUSTOTAL",
             style = MaterialTheme.typography.labelMedium,
-            color = GuardianPrimary,
+            color = if (isDarkTheme) GuardianPrimary else GuardianPrimaryLight,
             fontWeight = FontWeight.SemiBold,
             modifier = Modifier.padding(bottom = 12.dp)
         )
         
         SettingsItem(
             icon = Icons.Default.BugReport,
-            iconTint = if (viewModel.isVirusTotalApiKeyConfigured()) GuardianGreen else GuardianYellow,
+            iconTint = if (viewModel.isVirusTotalApiKeyConfigured()) (if (isDarkTheme) GuardianGreen else GuardianGreenLight) else (if (isDarkTheme) GuardianYellow else GuardianYellowLight),
             title = "API ключ VirusTotal",
             subtitle = if (viewModel.isVirusTotalApiKeyConfigured()) "Настроен" else "Нажмите для настройки",
+            isDarkTheme = isDarkTheme,
             onClick = { showApiKeyDialog = true }
         )
         
@@ -221,7 +235,7 @@ fun SettingsScreen(viewModel: GuardianViewModel) {
         Text(
             text = "ДАННЫЕ",
             style = MaterialTheme.typography.labelMedium,
-            color = GuardianPrimary,
+            color = if (isDarkTheme) GuardianPrimary else GuardianPrimaryLight,
             fontWeight = FontWeight.SemiBold,
             modifier = Modifier.padding(bottom = 12.dp)
         )
@@ -231,6 +245,7 @@ fun SettingsScreen(viewModel: GuardianViewModel) {
             iconTint = GuardianRed,
             title = "Сброс статистики",
             subtitle = "Очистить все сохраненные данные",
+            isDarkTheme = isDarkTheme,
             onClick = { showResetDialog = true }
         )
         
@@ -244,7 +259,7 @@ fun SettingsScreen(viewModel: GuardianViewModel) {
             Text(
                 text = "Guardian v1.0.0",
                 style = MaterialTheme.typography.bodySmall,
-                color = Color.DarkGray
+                color = grayText
             )
         }
         
@@ -252,9 +267,9 @@ fun SettingsScreen(viewModel: GuardianViewModel) {
         if (showResetDialog) {
             AlertDialog(
                 onDismissRequest = { showResetDialog = false },
-                containerColor = GuardianSurface,
-                title = { Text("Сбросить статистику?", color = Color.White) },
-                text = { Text("Это очистит всю статистику и историю событий.", color = Color.Gray) },
+                containerColor = surfaceColor,
+                title = { Text("Сбросить статистику?", color = textColor) },
+                text = { Text("Это очистит всю статистику и историю событий.", color = grayText) },
                 confirmButton = {
                     TextButton(
                         onClick = {
@@ -267,7 +282,7 @@ fun SettingsScreen(viewModel: GuardianViewModel) {
                 },
                 dismissButton = {
                     TextButton(onClick = { showResetDialog = false }) {
-                        Text("Отмена", color = Color.Gray)
+                        Text("Отмена", color = grayText)
                     }
                 }
             )
@@ -277,11 +292,11 @@ fun SettingsScreen(viewModel: GuardianViewModel) {
         if (showApiKeyDialog) {
             AlertDialog(
                 onDismissRequest = { showApiKeyDialog = false },
-                containerColor = GuardianSurface,
+                containerColor = surfaceColor,
                 title = { 
                     Text(
                         "API ключ VirusTotal", 
-                        color = Color.White, 
+                        color = textColor, 
                         fontWeight = FontWeight.Bold 
                     ) 
                 },
@@ -289,7 +304,7 @@ fun SettingsScreen(viewModel: GuardianViewModel) {
                     Column {
                         Text(
                             "Введите ваш API ключ VirusTotal для облачного сканирования.",
-                            color = Color.Gray
+                            color = grayText
                         )
                         Spacer(modifier = Modifier.height(8.dp))
                         Text(
@@ -311,17 +326,17 @@ fun SettingsScreen(viewModel: GuardianViewModel) {
                                     Icon(
                                         imageVector = if (showApiKey) Icons.Default.VisibilityOff else Icons.Default.Visibility,
                                         contentDescription = if (showApiKey) "Скрыть" else "Показать",
-                                        tint = Color.Gray
+                                        tint = grayText
                                     )
                                 }
                             },
                             colors = OutlinedTextFieldDefaults.colors(
-                                focusedTextColor = Color.White,
-                                unfocusedTextColor = Color.White,
+                                focusedTextColor = textColor,
+                                unfocusedTextColor = textColor,
                                 focusedBorderColor = GuardianBlue,
-                                unfocusedBorderColor = Color.Gray,
+                                unfocusedBorderColor = grayText,
                                 focusedLabelColor = GuardianBlue,
-                                unfocusedLabelColor = Color.Gray
+                                unfocusedLabelColor = grayText
                             ),
                             modifier = Modifier.fillMaxWidth()
                         )
@@ -345,7 +360,7 @@ fun SettingsScreen(viewModel: GuardianViewModel) {
                         showApiKeyDialog = false
                         apiKeyInput = ""
                     }) {
-                        Text("Отмена", color = Color.Gray)
+                        Text("Отмена", color = grayText)
                     }
                 }
             )
@@ -359,16 +374,22 @@ private fun SettingsItem(
     iconTint: Color,
     title: String,
     subtitle: String,
+    isDarkTheme: Boolean,
     trailing: (@Composable () -> Unit)? = null,
     onClick: (() -> Unit)? = null
 ) {
+    val cardBackground = if (isDarkTheme) GuardianSurface else GuardianSurfaceLight
+    val textColor = if (isDarkTheme) Color.White else Color(0xFF1E293B)
+    val grayText = if (isDarkTheme) Color.Gray else Color(0xFF64748B)
+    
     Card(
         modifier = Modifier
             .fillMaxWidth()
             .padding(bottom = 8.dp)
             .then(if (onClick != null) Modifier.clickable { onClick() } else Modifier),
         shape = RoundedCornerShape(16.dp),
-        colors = CardDefaults.cardColors(containerColor = GuardianSurface)
+        colors = CardDefaults.cardColors(containerColor = cardBackground),
+        elevation = CardDefaults.cardElevation(defaultElevation = if (isDarkTheme) 0.dp else 2.dp)
     ) {
         Row(
             modifier = Modifier
@@ -396,13 +417,13 @@ private fun SettingsItem(
                 Text(
                     text = title,
                     style = MaterialTheme.typography.titleSmall,
-                    color = Color.White,
+                    color = textColor,
                     fontWeight = FontWeight.SemiBold
                 )
                 Text(
                     text = subtitle,
                     style = MaterialTheme.typography.bodySmall,
-                    color = Color.Gray
+                    color = grayText
                 )
             }
             

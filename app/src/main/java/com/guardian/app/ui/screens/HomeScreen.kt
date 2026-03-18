@@ -142,7 +142,8 @@ fun HomeScreen(
         Card(
             modifier = Modifier.fillMaxWidth(),
             shape = RoundedCornerShape(16.dp),
-            colors = CardDefaults.cardColors(containerColor = GuardianSurface)
+            colors = CardDefaults.cardColors(containerColor = if (isDarkTheme) GuardianSurface else GuardianSurfaceLight),
+            elevation = CardDefaults.cardElevation(defaultElevation = if (isDarkTheme) 0.dp else 2.dp)
         ) {
             Column(
                 modifier = Modifier.padding(16.dp)
@@ -201,7 +202,7 @@ fun HomeScreen(
                     onClick = { viewModel.startScan() },
                     modifier = Modifier.fillMaxWidth(),
                     colors = ButtonDefaults.buttonColors(
-                        containerColor = GuardianPrimary
+                        containerColor = if (isDarkTheme) GuardianPrimary else GuardianPrimaryLight
                     ),
                     shape = RoundedCornerShape(12.dp)
                 ) {
@@ -226,27 +227,30 @@ fun HomeScreen(
             StatCard(
                 modifier = Modifier.weight(1f),
                 icon = Icons.Default.Usb,
-                iconTint = if (isUsbMonitorEnabled) GuardianGreen else GuardianSurfaceVariant,
+                iconTint = if (isUsbMonitorEnabled) GuardianGreen else Color.Gray,
                 title = "USB",
                 value = if (isUsbMonitorEnabled) "ВКЛ" else "ВЫКЛ",
+                isDarkTheme = isDarkTheme,
                 onClick = { viewModel.setUsbMonitorEnabled(!isUsbMonitorEnabled) }
             )
             
             StatCard(
                 modifier = Modifier.weight(1f),
                 icon = Icons.Default.Warning,
-                iconTint = GuardianRed,
+                iconTint = if (stats.threatsBlocked > 0) GuardianRed else if (isDarkTheme) GuardianGreen else GuardianGreenLight,
                 title = "Угрозы",
                 value = stats.threatsBlocked.toString(),
+                isDarkTheme = isDarkTheme,
                 onClick = { }
             )
             
             StatCard(
                 modifier = Modifier.weight(1f),
                 icon = Icons.Default.CheckCircle,
-                iconTint = GuardianGreen,
+                iconTint = if (isDarkTheme) GuardianGreen else GuardianGreenLight,
                 title = "Безопасно",
                 value = (stats.appsScanned - stats.threatsBlocked).coerceAtLeast(0).toString(),
+                isDarkTheme = isDarkTheme,
                 onClick = { }
             )
         }
@@ -278,7 +282,8 @@ fun HomeScreen(
             Card(
                 modifier = Modifier.fillMaxWidth(),
                 shape = RoundedCornerShape(12.dp),
-                colors = CardDefaults.cardColors(containerColor = GuardianSurface)
+                colors = CardDefaults.cardColors(containerColor = if (isDarkTheme) GuardianSurface else GuardianSurfaceLight),
+                elevation = CardDefaults.cardElevation(defaultElevation = if (isDarkTheme) 0.dp else 2.dp)
             ) {
                 Row(
                     modifier = Modifier
@@ -289,14 +294,14 @@ fun HomeScreen(
                     Icon(
                         imageVector = Icons.Default.Info,
                         contentDescription = null,
-                        tint = Color.Gray,
+                        tint = grayText,
                         modifier = Modifier.size(20.dp)
                     )
                     Spacer(modifier = Modifier.width(12.dp))
                     Text(
                         text = "Нет активности",
                         style = MaterialTheme.typography.bodyMedium,
-                        color = Color.Gray
+                        color = grayText
                     )
                 }
             }
@@ -308,7 +313,8 @@ fun HomeScreen(
                     EventItem(
                         title = event.title,
                         description = event.description,
-                        time = formatTime(event.timestamp)
+                        time = formatTime(event.timestamp),
+                        isDarkTheme = isDarkTheme
                     )
                 }
             }
@@ -333,7 +339,9 @@ fun HomeScreen(
                 icon = Icons.Default.Security,
                 title = "Полное сканирование",
                 subtitle = "Проверить все",
-                iconTint = GuardianGreen,
+                iconTint = if (isDarkTheme) GuardianGreen else GuardianGreenLight,
+                textColor = textColor,
+                isDarkTheme = isDarkTheme,
                 onClick = { viewModel.startScan() }
             )
             
@@ -343,6 +351,8 @@ fun HomeScreen(
                 title = "Сброс",
                 subtitle = "Очистить статистику",
                 iconTint = GuardianRed,
+                textColor = textColor,
+                isDarkTheme = isDarkTheme,
                 onClick = { viewModel.resetStats() }
             )
         }
@@ -354,11 +364,16 @@ private fun EventItem(
     title: String,
     description: String,
     time: String,
-    textColor: Color = Color.White
+    textColor: Color = Color.White,
+    isDarkTheme: Boolean = true
 ) {
+    val actualTextColor = if (isDarkTheme) Color.White else Color(0xFF1E293B)
+    val grayText = if (isDarkTheme) Color.Gray else Color(0xFF64748B)
+    
     Card(
         shape = RoundedCornerShape(12.dp),
-        colors = CardDefaults.cardColors(containerColor = GuardianSurface)
+        colors = CardDefaults.cardColors(containerColor = if (isDarkTheme) GuardianSurface else GuardianSurfaceLight),
+        elevation = CardDefaults.cardElevation(defaultElevation = if (isDarkTheme) 0.dp else 2.dp)
     ) {
         Row(
             modifier = Modifier
@@ -405,19 +420,19 @@ private fun EventItem(
                 Text(
                     text = title.replace(Regex("[📱🔍✅⚠️🦠⏳❌]"), "").trim(),
                     style = MaterialTheme.typography.titleSmall,
-                    color = textColor
+                    color = actualTextColor
                 )
                 Text(
                     text = description,
                     style = MaterialTheme.typography.bodySmall,
-                    color = Color.Gray
+                    color = grayText
                 )
             }
             
             Text(
                 text = time,
                 style = MaterialTheme.typography.labelSmall,
-                color = Color.DarkGray
+                color = grayText
             )
         }
     }
@@ -431,12 +446,14 @@ private fun StatCard(
     title: String,
     value: String,
     textColor: Color = Color.White,
+    isDarkTheme: Boolean = true,
     onClick: () -> Unit = {}
 ) {
     Card(
         modifier = modifier.clickable { onClick() },
         shape = RoundedCornerShape(16.dp),
-        colors = CardDefaults.cardColors(containerColor = GuardianSurface)
+        colors = CardDefaults.cardColors(containerColor = if (isDarkTheme) GuardianSurface else GuardianSurfaceLight),
+        elevation = CardDefaults.cardElevation(defaultElevation = if (isDarkTheme) 0.dp else 2.dp)
     ) {
         Column(
             modifier = Modifier.padding(12.dp),
@@ -452,13 +469,13 @@ private fun StatCard(
             Text(
                 text = value,
                 style = MaterialTheme.typography.titleMedium,
-                color = textColor,
+                color = if (isDarkTheme) Color.White else Color(0xFF1E293B),
                 fontWeight = FontWeight.Bold
             )
             Text(
                 text = title,
                 style = MaterialTheme.typography.labelSmall,
-                color = Color.Gray
+                color = if (isDarkTheme) Color.Gray else Color(0xFF64748B)
             )
         }
     }
@@ -472,12 +489,14 @@ private fun QuickActionCard(
     subtitle: String,
     iconTint: Color,
     textColor: Color = Color.White,
+    isDarkTheme: Boolean = true,
     onClick: () -> Unit
 ) {
     Card(
         modifier = modifier.clickable { onClick() },
         shape = RoundedCornerShape(16.dp),
-        colors = CardDefaults.cardColors(containerColor = GuardianSurface)
+        colors = CardDefaults.cardColors(containerColor = if (isDarkTheme) GuardianSurface else GuardianSurfaceLight),
+        elevation = CardDefaults.cardElevation(defaultElevation = if (isDarkTheme) 0.dp else 2.dp)
     ) {
         Row(
             modifier = Modifier.padding(16.dp),
@@ -487,7 +506,7 @@ private fun QuickActionCard(
                 modifier = Modifier
                     .size(40.dp)
                     .clip(RoundedCornerShape(12.dp))
-                    .background(iconTint.copy(alpha = 0.2f)),
+                    .background(iconTint.copy(alpha = 0.15f)),
                 contentAlignment = Alignment.Center
             ) {
                 Icon(
@@ -507,7 +526,7 @@ private fun QuickActionCard(
                 Text(
                     text = subtitle,
                     style = MaterialTheme.typography.bodySmall,
-                    color = Color.Gray
+                    color = if (isDarkTheme) Color.Gray else Color(0xFF64748B)
                 )
             }
         }

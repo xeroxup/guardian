@@ -1,7 +1,12 @@
 package com.guardian.app.ui.screens
 
+import android.content.Context
 import android.content.pm.ApplicationInfo
 import android.content.pm.PackageManager
+import android.net.Uri
+import android.provider.DocumentsContract
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -47,19 +52,24 @@ fun ScanScreen(viewModel: GuardianViewModel) {
     val virusTotalProgress by viewModel.virusTotalProgress.collectAsState()
     val virusTotalResults by viewModel.virusTotalResults.collectAsState()
     val isDarkTheme by viewModel.isDarkTheme.collectAsState()
+    val scanResultsFromViewModel by viewModel.scanResults.collectAsState()
     
     // Use theme-aware colors
     val backgroundColor = if (isDarkTheme) GuardianBackground else GuardianBackgroundLight
     val surfaceColor = if (isDarkTheme) GuardianSurface else GuardianSurfaceLight
     val textColor = if (isDarkTheme) Color.White else Color(0xFF1E293B)
     val grayText = if (isDarkTheme) Color.Gray else Color(0xFF64748B)
+    val cardBackground = if (isDarkTheme) GuardianSurface else GuardianSurfaceLight
     
-    var scanResults by remember { mutableStateOf<List<AppScanResult>>(emptyList()) }
+    var localScanResults by remember { mutableStateOf<List<AppScanResult>>(emptyList()) }
+    val scanResults = if (scanResultsFromViewModel.isNotEmpty()) scanResultsFromViewModel else localScanResults
+    
     var showVirusTotalDialog by remember { mutableStateOf(false) }
     var showVirusTotalAppPicker by remember { mutableStateOf(false) }
     var showApkDialog by remember { mutableStateOf(false) }
     var apkResult by remember { mutableStateOf<String?>(null) }
     var showAllApps by remember { mutableStateOf(false) }
+    var isLocalScanning by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
     
     val infiniteTransition = rememberInfiniteTransition(label = "scan")
@@ -99,16 +109,19 @@ fun ScanScreen(viewModel: GuardianViewModel) {
             modifier = Modifier.fillMaxWidth(),
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            // Full VirusTotal Scan Button
+            // Quick Scan Button - Now with real threat detection
             Card(
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(80.dp)
-                    .clickable(enabled = !isVirusTotalScanning) {
-                        showVirusTotalDialog = true
+                    .clickable(enabled = !isVirusTotalScanning && !isLocalScanning) {
+                        isLocalScanning = true
+                        viewModel.startScan()
+                        isLocalScanning = false
                     },
                 shape = RoundedCornerShape(16.dp),
-                colors = CardDefaults.cardColors(containerColor = GuardianSurface)
+                colors = CardDefaults.cardColors(containerColor = cardBackground),
+                elevation = CardDefaults.cardElevation(defaultElevation = if (isDarkTheme) 0.dp else 2.dp)
             ) {
                 Row(
                     modifier = Modifier
@@ -119,7 +132,59 @@ fun ScanScreen(viewModel: GuardianViewModel) {
                     Box(
                         modifier = Modifier
                             .size(48.dp)
-                            .background(GuardianBlue.copy(alpha = 0.2f), CircleShape),
+                            .background(GuardianPrimary.copy(alpha = 0.15f), CircleShape),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            imageVector = if (isLocalScanning) Icons.Default.Sync else Icons.Default.Security,
+                            contentDescription = "Быстрое сканирование",
+                            modifier = Modifier
+                                .size(28.dp)
+                                .then(if (isLocalScanning) Modifier.rotate(rotation) else Modifier),
+                            tint = GuardianPrimary
+                        )
+                    }
+                    
+                    Spacer(modifier = Modifier.width(16.dp))
+                    
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = "Быстрое сканирование",
+                            style = MaterialTheme.typography.titleMedium,
+                            color = textColor,
+                            fontWeight = FontWeight.SemiBold
+                        )
+                        Text(
+                            text = "Проверка сигнатур и разрешений",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = grayText
+                        )
+                    }
+                }
+            }
+            
+            // Full VirusTotal Scan Button
+            Card(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(80.dp)
+                    .clickable(enabled = !isVirusTotalScanning && !isLocalScanning) {
+                        showVirusTotalDialog = true
+                    },
+                shape = RoundedCornerShape(16.dp),
+                colors = CardDefaults.cardColors(containerColor = cardBackground),
+                elevation = CardDefaults.cardElevation(defaultElevation = if (isDarkTheme) 0.dp else 2.dp)
+            ) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(horizontal = 20.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .size(48.dp)
+                            .background(GuardianBlue.copy(alpha = 0.15f), CircleShape),
                         contentAlignment = Alignment.Center
                     ) {
                         Icon(
@@ -128,7 +193,7 @@ fun ScanScreen(viewModel: GuardianViewModel) {
                             modifier = Modifier
                                 .size(28.dp)
                                 .then(if (isVirusTotalScanning) Modifier.rotate(rotation) else Modifier),
-                            tint = if (isVirusTotalScanning) GuardianYellow else GuardianBlue
+                            tint = GuardianBlue
                         )
                     }
                     
@@ -136,13 +201,13 @@ fun ScanScreen(viewModel: GuardianViewModel) {
                     
                     Column(modifier = Modifier.weight(1f)) {
                         Text(
-                            text = "Полное сканирование VirusTotal",
+                            text = "VirusTotal сканирование",
                             style = MaterialTheme.typography.titleMedium,
                             color = textColor,
                             fontWeight = FontWeight.SemiBold
                         )
                         Text(
-                            text = "Проверить все установленные приложения",
+                            text = "Облачная проверка всех приложений",
                             style = MaterialTheme.typography.bodySmall,
                             color = grayText
                         )
@@ -155,11 +220,12 @@ fun ScanScreen(viewModel: GuardianViewModel) {
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(80.dp)
-                    .clickable(enabled = !isVirusTotalScanning) {
+                    .clickable(enabled = !isVirusTotalScanning && !isLocalScanning) {
                         showVirusTotalAppPicker = true
                     },
                 shape = RoundedCornerShape(16.dp),
-                colors = CardDefaults.cardColors(containerColor = GuardianSurface)
+                colors = CardDefaults.cardColors(containerColor = cardBackground),
+                elevation = CardDefaults.cardElevation(defaultElevation = if (isDarkTheme) 0.dp else 2.dp)
             ) {
                 Row(
                     modifier = Modifier
@@ -170,7 +236,7 @@ fun ScanScreen(viewModel: GuardianViewModel) {
                     Box(
                         modifier = Modifier
                             .size(48.dp)
-                            .background(GuardianGreen.copy(alpha = 0.2f), CircleShape),
+                            .background(GuardianGreen.copy(alpha = 0.15f), CircleShape),
                         contentAlignment = Alignment.Center
                     ) {
                         Icon(
@@ -191,7 +257,7 @@ fun ScanScreen(viewModel: GuardianViewModel) {
                             fontWeight = FontWeight.SemiBold
                         )
                         Text(
-                            text = "Выбрать конкретное приложение для сканирования",
+                            text = "Выбрать конкретное приложение",
                             style = MaterialTheme.typography.bodySmall,
                             color = grayText
                         )
@@ -204,11 +270,12 @@ fun ScanScreen(viewModel: GuardianViewModel) {
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(80.dp)
-                    .clickable(enabled = !isVirusTotalScanning) {
+                    .clickable(enabled = !isVirusTotalScanning && !isLocalScanning) {
                         showApkDialog = true
                     },
                 shape = RoundedCornerShape(16.dp),
-                colors = CardDefaults.cardColors(containerColor = GuardianSurface)
+                colors = CardDefaults.cardColors(containerColor = cardBackground),
+                elevation = CardDefaults.cardElevation(defaultElevation = if (isDarkTheme) 0.dp else 2.dp)
             ) {
                 Row(
                     modifier = Modifier
@@ -219,7 +286,7 @@ fun ScanScreen(viewModel: GuardianViewModel) {
                     Box(
                         modifier = Modifier
                             .size(48.dp)
-                            .background(GuardianYellow.copy(alpha = 0.2f), CircleShape),
+                            .background(GuardianYellow.copy(alpha = 0.15f), CircleShape),
                         contentAlignment = Alignment.Center
                     ) {
                         Icon(
@@ -253,12 +320,18 @@ fun ScanScreen(viewModel: GuardianViewModel) {
         Spacer(modifier = Modifier.height(16.dp))
         Text(
             text = when {
+                isLocalScanning -> "Быстрое сканирование..."
                 isVirusTotalScanning -> "VirusTotal: ${virusTotalProgress.first}/${virusTotalProgress.second}"
+                scanResults.isNotEmpty() && scanResults.any { it.isThreat } -> "⚠️ Обнаружены угрозы!"
+                scanResults.isNotEmpty() -> "✅ Угроз не обнаружено"
                 else -> "Выберите тип сканирования"
             },
             style = MaterialTheme.typography.titleMedium,
             color = when {
+                isLocalScanning -> GuardianPrimary
                 isVirusTotalScanning -> GuardianYellow
+                scanResults.isNotEmpty() && scanResults.any { it.isThreat } -> GuardianRed
+                scanResults.isNotEmpty() -> GuardianGreen
                 else -> grayText
             },
             modifier = Modifier.align(Alignment.CenterHorizontally)
@@ -552,8 +625,24 @@ fun ScanScreen(viewModel: GuardianViewModel) {
         )
     }
     
-    // APK Scan Dialog
+    // APK Scan Dialog with Activity Result Launcher
     if (showApkDialog) {
+        val apkPickerLauncher = rememberLauncherForActivityResult(
+            ActivityResultContracts.GetContent()
+        ) { uri: Uri? ->
+            uri?.let { selectedUri ->
+                // Get file path from URI
+                val filePath = getPathFromUri(context, selectedUri)
+                if (filePath != null) {
+                    viewModel.scanApk(filePath) { isThreat, message ->
+                        apkResult = message
+                    }
+                } else {
+                    apkResult = "❌ Не удалось получить путь к файлу"
+                }
+            }
+        }
+        
         AlertDialog(
             onDismissRequest = { 
                 showApkDialog = false
@@ -572,34 +661,100 @@ fun ScanScreen(viewModel: GuardianViewModel) {
                     Spacer(modifier = Modifier.height(16.dp))
                     Button(
                         onClick = {
-                            val intent = android.content.Intent(android.content.Intent.ACTION_GET_CONTENT).apply {
-                                type = "application/vnd.android.package-archive"
-                                addCategory(android.content.Intent.CATEGORY_OPENABLE)
-                            }
-                            context.startActivity(intent)
+                            apkPickerLauncher.launch("application/vnd.android.package-archive")
                         },
-                        colors = ButtonDefaults.buttonColors(containerColor = GuardianPrimary)
+                        colors = ButtonDefaults.buttonColors(containerColor = GuardianPrimary),
+                        shape = RoundedCornerShape(12.dp),
+                        modifier = Modifier.fillMaxWidth()
                     ) {
                         Icon(Icons.Default.FolderOpen, contentDescription = null)
                         Spacer(modifier = Modifier.width(8.dp))
-                        Text("Выбрать файл")
+                        Text("Выбрать файл APK")
                     }
                     if (apkResult != null) {
                         Spacer(modifier = Modifier.height(16.dp))
-                        Text(
-                            text = apkResult!!,
-                            color = if (apkResult!!.startsWith("⚠️")) GuardianRed else GuardianGreen,
-                            style = MaterialTheme.typography.bodyMedium
-                        )
+                        Card(
+                            shape = RoundedCornerShape(12.dp),
+                            colors = CardDefaults.cardColors(
+                                containerColor = if (apkResult!!.contains("⚠️") || apkResult!!.contains("❌")) 
+                                    GuardianRed.copy(alpha = 0.1f) 
+                                else 
+                                    GuardianGreen.copy(alpha = 0.1f)
+                            )
+                        ) {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(16.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Icon(
+                                    imageVector = if (apkResult!!.contains("⚠️") || apkResult!!.contains("❌")) 
+                                        Icons.Default.Warning 
+                                    else 
+                                        Icons.Default.CheckCircle,
+                                    contentDescription = null,
+                                    tint = if (apkResult!!.contains("⚠️") || apkResult!!.contains("❌")) 
+                                        GuardianRed 
+                                    else 
+                                        GuardianGreen,
+                                    modifier = Modifier.size(24.dp)
+                                )
+                                Spacer(modifier = Modifier.width(12.dp))
+                                Text(
+                                    text = apkResult!!,
+                                    color = if (apkResult!!.contains("⚠️") || apkResult!!.contains("❌")) 
+                                        GuardianRed 
+                                    else 
+                                        GuardianGreen,
+                                    style = MaterialTheme.typography.bodyMedium
+                                )
+                            }
+                        }
                     }
                 }
             },
             confirmButton = {
-                TextButton(onClick = { showApkDialog = false }) {
+                TextButton(onClick = { 
+                    showApkDialog = false 
+                    apkResult = null
+                }) {
                     Text("Закрыть", color = grayText)
                 }
             }
         )
+    }
+}
+
+// Helper function to get file path from URI
+private fun getPathFromUri(context: Context, uri: Uri): String? {
+    return try {
+        when {
+            DocumentsContract.isDocumentUri(context, uri) -> {
+                val docId = DocumentsContract.getDocumentId(uri)
+                when {
+                    docId.startsWith("raw:") -> docId.substring(4)
+                    docId.startsWith("primary:") -> {
+                        val split = docId.split(":")
+                        android.os.Environment.getExternalStorageDirectory().toString() + "/" + split[1]
+                    }
+                    else -> null
+                }
+            }
+            "content".equals(uri.scheme, ignoreCase = true) -> {
+                // Try to query the content provider
+                context.contentResolver.query(uri, null, null, null, null)?.use { cursor ->
+                    val columnIndex = cursor.getColumnIndexOrThrow(android.provider.MediaStore.Files.FileColumns.DATA)
+                    if (cursor.moveToFirst()) {
+                        cursor.getString(columnIndex)
+                    } else null
+                }
+            }
+            "file".equals(uri.scheme, ignoreCase = true) -> uri.path
+            else -> null
+        }
+    } catch (e: Exception) {
+        null
     }
 }
 
@@ -650,14 +805,15 @@ private fun AppListItem(
     onRemoveFromBlacklist: () -> Unit,
     onUninstall: () -> Unit
 ) {
-    val textColor = if (isSystemInDarkTheme()) Color.White else Color(0xFF1E293B)
-    val grayText = if (isSystemInDarkTheme()) Color.Gray else Color(0xFF64748B)
+    val isDarkTheme = isSystemInDarkTheme()
+    val textColor = if (isDarkTheme) Color.White else Color(0xFF1E293B)
+    val grayText = if (isDarkTheme) Color.Gray else Color(0xFF64748B)
+    val cardBackground = if (isDarkTheme) GuardianSurface else GuardianSurfaceLight
     
     Card(
         shape = RoundedCornerShape(12.dp),
-        colors = CardDefaults.cardColors(
-            containerColor = if (app.isThreat) GuardianSurface else GuardianSurface
-        )
+        colors = CardDefaults.cardColors(containerColor = cardBackground),
+        elevation = CardDefaults.cardElevation(defaultElevation = if (isDarkTheme) 0.dp else 1.dp)
     ) {
         Row(
             modifier = Modifier

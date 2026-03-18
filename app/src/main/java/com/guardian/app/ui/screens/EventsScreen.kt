@@ -106,7 +106,8 @@ private fun EventItem(event: SecurityEvent) {
     
     Card(
         shape = RoundedCornerShape(16.dp),
-        colors = CardDefaults.cardColors(containerColor = GuardianSurface)
+        colors = CardDefaults.cardColors(containerColor = if (isDarkTheme) GuardianSurface else GuardianSurfaceLight),
+        elevation = CardDefaults.cardElevation(defaultElevation = if (isDarkTheme) 0.dp else 2.dp)
     ) {
         Row(
             modifier = Modifier
