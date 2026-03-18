@@ -18,17 +18,23 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import com.guardian.app.ui.theme.*
 import com.guardian.app.viewmodel.GuardianViewModel
-import java.text.SimpleDateFormat
-import java.util.*
 
 @Composable
 fun HomeScreen(viewModel: GuardianViewModel) {
     val isProtectionEnabled by viewModel.isProtectionEnabled.collectAsState()
     val isUsbMonitorEnabled by viewModel.isUsbMonitorEnabled.collectAsState()
     val stats by viewModel.stats.collectAsState()
+    val events by viewModel.events.collectAsState()
+    
+    // Calculate scan progress percentage
+    val scanProgress = if (stats.appsScanned > 0) {
+        (stats.appsScanned.toFloat() / 200 * 100).coerceIn(0f, 100f)
+    } else 0f
+    
+    // Get recent events
+    val recentEvents = events.take(3)
     
     Column(
         modifier = Modifier
@@ -69,9 +75,9 @@ fun HomeScreen(viewModel: GuardianViewModel) {
             )
         }
         
-        Spacer(modifier = Modifier.height(32.dp))
+        Spacer(modifier = Modifier.height(24.dp))
         
-        // Main Shield Button
+        // Main Shield with Status
         Box(
             modifier = Modifier.fillMaxWidth(),
             contentAlignment = Alignment.Center
@@ -105,17 +111,109 @@ fun HomeScreen(viewModel: GuardianViewModel) {
                     modifier = Modifier.fillMaxSize(),
                     contentAlignment = Alignment.Center
                 ) {
-                    Icon(
-                        imageVector = if (isProtectionEnabled) Icons.Default.Shield else Icons.Default.ShieldMoon,
-                        contentDescription = "Shield",
-                        modifier = Modifier.size(72.dp),
-                        tint = if (isProtectionEnabled) GuardianPrimary else GuardianRed
-                    )
+                    Column(
+                        horizontalAlignment = Alignment.CenterHorizontally
+                    ) {
+                        Icon(
+                            imageVector = if (isProtectionEnabled) Icons.Default.Shield else Icons.Default.ShieldMoon,
+                            contentDescription = "Shield",
+                            modifier = Modifier.size(56.dp),
+                            tint = if (isProtectionEnabled) GuardianPrimary else GuardianRed
+                        )
+                        Spacer(modifier = Modifier.height(4.dp))
+                        Text(
+                            text = if (isProtectionEnabled) "SAFE" else "OFF",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = if (isProtectionEnabled) GuardianGreen else GuardianRed
+                        )
+                    }
                 }
             }
         }
         
-        Spacer(modifier = Modifier.height(32.dp))
+        Spacer(modifier = Modifier.height(24.dp))
+        
+        // Scan Progress Card
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(16.dp),
+            colors = CardDefaults.cardColors(containerColor = GuardianSurface)
+        ) {
+            Column(
+                modifier = Modifier.padding(16.dp)
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = "Scan Status",
+                        style = MaterialTheme.typography.titleMedium,
+                        color = Color.White,
+                        fontWeight = FontWeight.SemiBold
+                    )
+                    Text(
+                        text = "${stats.appsScanned} apps",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = GuardianGreen
+                    )
+                }
+                
+                Spacer(modifier = Modifier.height(12.dp))
+                
+                // Progress Bar
+                LinearProgressIndicator(
+                    progress = { scanProgress / 100f },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(8.dp)
+                        .clip(RoundedCornerShape(4.dp)),
+                    color = GuardianGreen,
+                    trackColor = GuardianSurfaceVariant,
+                )
+                
+                Spacer(modifier = Modifier.height(8.dp))
+                
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Text(
+                        text = if (stats.lastScanTime > 0) "Last: ${formatTime(stats.lastScanTime)}" else "Never scanned",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = Color.Gray
+                    )
+                    Text(
+                        text = "${stats.threatsBlocked} threats found",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = if (stats.threatsBlocked > 0) GuardianRed else Color.Gray
+                    )
+                }
+                
+                Spacer(modifier = Modifier.height(12.dp))
+                
+                // Quick Scan Button
+                Button(
+                    onClick = { viewModel.startScan() },
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = GuardianPrimary
+                    ),
+                    shape = RoundedCornerShape(12.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Security,
+                        contentDescription = null,
+                        modifier = Modifier.size(18.dp)
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text("Quick Scan")
+                }
+            }
+        }
+        
+        Spacer(modifier = Modifier.height(16.dp))
         
         // Stats Cards
         Row(
@@ -133,9 +231,9 @@ fun HomeScreen(viewModel: GuardianViewModel) {
             
             StatCard(
                 modifier = Modifier.weight(1f),
-                icon = Icons.Default.Block,
-                iconTint = GuardianPink,
-                title = "Blocked",
+                icon = Icons.Default.Warning,
+                iconTint = GuardianRed,
+                title = "Threats",
                 value = stats.threatsBlocked.toString(),
                 onClick = { }
             )
@@ -143,11 +241,61 @@ fun HomeScreen(viewModel: GuardianViewModel) {
             StatCard(
                 modifier = Modifier.weight(1f),
                 icon = Icons.Default.CheckCircle,
-                iconTint = GuardianYellow,
-                title = "Scanned",
-                value = stats.appsScanned.toString(),
+                iconTint = GuardianGreen,
+                title = "Safe",
+                value = (stats.appsScanned - stats.threatsBlocked).coerceAtLeast(0).toString(),
                 onClick = { }
             )
+        }
+        
+        Spacer(modifier = Modifier.height(24.dp))
+        
+        // Recent Activity
+        Text(
+            text = "Recent Activity",
+            style = MaterialTheme.typography.titleMedium,
+            color = Color.White,
+            modifier = Modifier.padding(bottom = 12.dp)
+        )
+        
+        if (recentEvents.isEmpty()) {
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(12.dp),
+                colors = CardDefaults.cardColors(containerColor = GuardianSurface)
+            ) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(16.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Info,
+                        contentDescription = null,
+                        tint = Color.Gray,
+                        modifier = Modifier.size(20.dp)
+                    )
+                    Spacer(modifier = Modifier.width(12.dp))
+                    Text(
+                        text = "No recent activity",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = Color.Gray
+                    )
+                }
+            }
+        } else {
+            Column(
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                recentEvents.forEach { event ->
+                    EventItem(
+                        title = event.title,
+                        description = event.description,
+                        time = formatTime(event.timestamp)
+                    )
+                }
+            }
         }
         
         Spacer(modifier = Modifier.height(24.dp))
@@ -166,85 +314,30 @@ fun HomeScreen(viewModel: GuardianViewModel) {
         ) {
             QuickActionCard(
                 modifier = Modifier.weight(1f),
-                icon = Icons.Default.Search,
-                title = "Quick Scan",
-                subtitle = "Scan now",
+                icon = Icons.Default.Security,
+                title = "Full Scan",
+                subtitle = "Scan all apps",
                 iconTint = GuardianGreen,
                 onClick = { viewModel.startScan() }
             )
             
             QuickActionCard(
                 modifier = Modifier.weight(1f),
-                icon = Icons.Default.Apps,
-                title = "Apps",
-                subtitle = "Blacklist",
-                iconTint = GuardianBlue,
-                onClick = { /* Navigate to blacklist */ }
+                icon = Icons.Default.Refresh,
+                title = "Reset",
+                subtitle = "Clear stats",
+                iconTint = GuardianRed,
+                onClick = { viewModel.resetStats() }
             )
         }
-        
-        Spacer(modifier = Modifier.height(24.dp))
-        
-        // Individual Module Toggles
-        Text(
-            text = "Protection Modules",
-            style = MaterialTheme.typography.titleMedium,
-            color = Color.White,
-            modifier = Modifier.padding(bottom = 12.dp)
-        )
-        
-        ModuleToggleCard(
-            icon = Icons.Default.Usb,
-            title = "USB Debug Monitor",
-            subtitle = "Alert if USB debugging is enabled",
-            isEnabled = isUsbMonitorEnabled,
-            onToggle = { viewModel.setUsbMonitorEnabled(it) },
-            enabledColor = GuardianGreen
-        )
-        
-        Spacer(modifier = Modifier.height(8.dp))
-        
-        ModuleToggleCard(
-            icon = Icons.Default.Sms,
-            title = "SMS Filter",
-            subtitle = "Block scam and fraud SMS",
-            isEnabled = viewModel.isSmsFilterEnabled.collectAsState().value,
-            onToggle = { viewModel.setSmsFilterEnabled(it) },
-            enabledColor = GuardianBlue
-        )
-        
-        Spacer(modifier = Modifier.height(8.dp))
-        
-        ModuleToggleCard(
-            icon = Icons.Default.Phone,
-            title = "Call Filter",
-            subtitle = "Block suspicious calls",
-            isEnabled = viewModel.isCallFilterEnabled.collectAsState().value,
-            onToggle = { viewModel.setCallFilterEnabled(it) },
-            enabledColor = GuardianPink
-        )
-        
-        Spacer(modifier = Modifier.height(8.dp))
-        
-        ModuleToggleCard(
-            icon = Icons.Default.Apps,
-            title = "App Monitor",
-            subtitle = "Track app installations",
-            isEnabled = viewModel.isAppMonitorEnabled.collectAsState().value,
-            onToggle = { viewModel.setAppMonitorEnabled(it) },
-            enabledColor = GuardianYellow
-        )
     }
 }
 
 @Composable
-private fun ModuleToggleCard(
-    icon: androidx.compose.ui.graphics.vector.ImageVector,
+private fun EventItem(
     title: String,
-    subtitle: String,
-    isEnabled: Boolean,
-    onToggle: (Boolean) -> Unit,
-    enabledColor: Color
+    description: String,
+    time: String
 ) {
     Card(
         shape = RoundedCornerShape(12.dp),
@@ -253,21 +346,38 @@ private fun ModuleToggleCard(
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(16.dp),
+                .padding(12.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
             Box(
                 modifier = Modifier
-                    .size(40.dp)
-                    .clip(RoundedCornerShape(10.dp))
-                    .background(if (isEnabled) enabledColor.copy(alpha = 0.2f) else GuardianSurfaceVariant),
+                    .size(36.dp)
+                    .clip(RoundedCornerShape(8.dp))
+                    .background(
+                        when {
+                            title.contains("⚠️") || title.contains("Warning") -> GuardianRed.copy(alpha = 0.2f)
+                            title.contains("📱") -> GuardianBlue.copy(alpha = 0.2f)
+                            title.contains("🔍") -> GuardianGreen.copy(alpha = 0.2f)
+                            else -> GuardianSurfaceVariant
+                        }
+                    ),
                 contentAlignment = Alignment.Center
             ) {
                 Icon(
-                    imageVector = icon,
-                    contentDescription = title,
-                    tint = if (isEnabled) enabledColor else Color.Gray,
-                    modifier = Modifier.size(20.dp)
+                    imageVector = when {
+                        title.contains("USB") -> Icons.Default.Usb
+                        title.contains("App") -> Icons.Default.Apps
+                        title.contains("Scan") -> Icons.Default.Search
+                        else -> Icons.Default.Info
+                    },
+                    contentDescription = null,
+                    tint = when {
+                        title.contains("⚠️") || title.contains("Warning") -> GuardianRed
+                        title.contains("📱") -> GuardianBlue
+                        title.contains("🔍") -> GuardianGreen
+                        else -> Color.Gray
+                    },
+                    modifier = Modifier.size(18.dp)
                 )
             }
             
@@ -280,21 +390,16 @@ private fun ModuleToggleCard(
                     color = Color.White
                 )
                 Text(
-                    text = subtitle,
+                    text = description,
                     style = MaterialTheme.typography.bodySmall,
                     color = Color.Gray
                 )
             }
             
-            Switch(
-                checked = isEnabled,
-                onCheckedChange = onToggle,
-                colors = SwitchDefaults.colors(
-                    checkedThumbColor = Color.White,
-                    checkedTrackColor = enabledColor,
-                    uncheckedThumbColor = Color.Gray,
-                    uncheckedTrackColor = GuardianSurfaceVariant
-                )
+            Text(
+                text = time,
+                style = MaterialTheme.typography.labelSmall,
+                color = Color.DarkGray
             )
         }
     }
@@ -315,16 +420,16 @@ private fun StatCard(
         colors = CardDefaults.cardColors(containerColor = GuardianSurface)
     ) {
         Column(
-            modifier = Modifier.padding(16.dp),
+            modifier = Modifier.padding(12.dp),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
             Icon(
                 imageVector = icon,
                 contentDescription = title,
                 tint = iconTint,
-                modifier = Modifier.size(24.dp)
+                modifier = Modifier.size(22.dp)
             )
-            Spacer(modifier = Modifier.height(8.dp))
+            Spacer(modifier = Modifier.height(4.dp))
             Text(
                 text = value,
                 style = MaterialTheme.typography.titleMedium,
@@ -333,7 +438,7 @@ private fun StatCard(
             )
             Text(
                 text = title,
-                style = MaterialTheme.typography.bodySmall,
+                style = MaterialTheme.typography.labelSmall,
                 color = Color.Gray
             )
         }
@@ -387,4 +492,10 @@ private fun QuickActionCard(
             }
         }
     }
+}
+
+private fun formatTime(timestamp: Long): String {
+    if (timestamp == 0L) return "Never"
+    val sdf = java.text.SimpleDateFormat("dd MMM HH:mm", java.util.Locale.getDefault())
+    return sdf.format(java.util.Date(timestamp))
 }

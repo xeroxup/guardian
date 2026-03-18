@@ -36,6 +36,7 @@ class GuardianViewModel(application: Application) : AndroidViewModel(application
     val threats get() = events.value.count { it.type == EventType.APP_BLOCKED || it.type == EventType.USB_ENABLED }
     val blocks get() = stats.value.threatsBlocked
     val checks get() = stats.value.appsScanned
+    val lastScanTime get() = stats.value.lastScanTime
     
     // Setters
     fun setProtectionEnabled(enabled: Boolean) {
