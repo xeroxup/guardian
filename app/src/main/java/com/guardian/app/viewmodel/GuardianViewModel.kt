@@ -101,27 +101,7 @@ class GuardianViewModel(application: Application) : AndroidViewModel(application
         return android.content.Intent(android.provider.Settings.ACTION_APPLICATION_DEVELOPMENT_SETTINGS)
     }
     
-    fun setSmsFilterEnabled(enabled: Boolean) {
-        viewModelScope.launch {
-            repository.setSmsFilterEnabled(enabled)
-            repository.addEvent(
-                EventType.SCAN_COMPLETED,
-                "📱 SMS Filter",
-                "SMS filtering ${if (enabled) "enabled" else "disabled"}"
-            )
-        }
-    }
-    
-    fun setCallFilterEnabled(enabled: Boolean) {
-        viewModelScope.launch {
-            repository.setCallFilterEnabled(enabled)
-            repository.addEvent(
-                EventType.SCAN_COMPLETED,
-                "📞 Call Filter",
-                "Call filtering ${if (enabled) "enabled" else "disabled"}"
-            )
-        }
-    }
+    // SMS and Call filter methods removed for Google Play compliance
     
     fun setAppMonitorEnabled(enabled: Boolean) {
         viewModelScope.launch {
