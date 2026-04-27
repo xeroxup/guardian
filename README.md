@@ -37,11 +37,7 @@ git clone https://github.com/xeroxll/guard.git
 ./gradlew assembleDebug
 ```
 
-## APK Location
 
-After building, find the APK at:
-- Debug: `app/build/outputs/apk/debug/app-debug.apk`
-- Release: `app/build/outputs/apk/release/app-release.apk`
 
 ## Permissions
 
