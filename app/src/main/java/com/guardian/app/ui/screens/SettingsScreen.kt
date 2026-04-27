@@ -42,6 +42,7 @@ fun SettingsScreen(viewModel: GuardianViewModel) {
         modifier = Modifier
             .fillMaxSize()
             .background(backgroundColor)
+            .verticalScroll(rememberScrollState())
             .padding(16.dp)
     ) {
         Text(
